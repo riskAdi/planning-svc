@@ -2,6 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import mongoose from 'mongoose';
 
+import { Hospitals } from './hospitals.schema';
+import { Nurse } from './nurse.schema';
 
 export type DoctorsDocument = HydratedDocument<Doctors>;
 
@@ -28,11 +30,19 @@ export class Doctors {
   @Prop({ required: false })
   specialty: string;
 
-  @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
-  hospital: any;
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: Hospitals.name,
+  })
+  hospital: mongoose.Types.ObjectId | Hospitals;
 
-  @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
-  nurse: any;
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: Nurse.name,
+  })
+  nurse: mongoose.Types.ObjectId | Nurse;
 
   @Prop({ required: false })
   search: string;
