@@ -1,25 +1,17 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 
-import { FormService } from '../services/form.service';
+import { FormQueryService } from '../services/form-query.service';
 
-@Controller('forms')
+@Controller('form')
 export class FormController {
-  constructor(private readonly formService: FormService) {}
+  constructor(private readonly formQuery: FormQueryService) {}
 
   @Get(':formName')
-  findMany(
+  async getFormData(
     @Param('formName') formName: string,
-    @Query() query: Record<string, string | string[] | undefined>,
+    @Query('search') search?: string,
+    @Query('include') include?: string,
   ) {
-    return this.formService.findMany(formName, query);
-  }
-
-  @Get(':formName/:id')
-  findOne(
-    @Param('formName') formName: string,
-    @Param('id') id: string,
-    @Query() query: Record<string, string | string[] | undefined>,
-  ) {
-    return this.formService.findOne(formName, id, query);
+    return this.formQuery.find(formName, search, include);
   }
 }

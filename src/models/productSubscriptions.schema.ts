@@ -1,8 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-
-export type ProductSubscriptionsDocument = HydratedDocument<ProductSubscriptions>;
+export type ProductSubscriptionsDocument =
+  HydratedDocument<ProductSubscriptions>;
 
 @Schema({ timestamps: true })
 export class ProductSubscriptions {
@@ -34,4 +34,5 @@ export class ProductSubscriptions {
   warrantyPolicy: string;
 }
 
-export const ProductSubscriptionsSchema = SchemaFactory.createForClass(ProductSubscriptions);
+export const ProductSubscriptionsSchema =
+  SchemaFactory.createForClass(ProductSubscriptions);

@@ -1,61 +1,210 @@
 # Architecture
 
-## High-level pattern
+## System Type
+This system is a **dynamic form-based data query engine built on NestJS and MongoDB**. It provides a generic API layer that resolves data at runtime based on a `formName`.
 
-This service follows standard **NestJS layered architecture**:
+It behaves like a metadata-driven backend where schemas, queries, and relations are resolved dynamically instead of being hardcoded per entity.
 
-- **Controllers** expose HTTP endpoints and handle request/response shaping.
-- **Services** contain business logic and orchestrate persistence.
-- **Models/Schemas** define persisted shapes using **Mongoose**.
+---
 
-Keep controllers thin; push logic into services.
+## High-Level Architecture
 
-## Component map
+Request flow:
 
-### Modules
+Client → NestJS Controller → Query Orchestrator → MongoDB → Relation Resolver → Response
 
-- `src/app.module.ts` composes the application module graph.
-- As the app grows, prefer feature modules (e.g. `src/modules/<feature>/*`) to avoid a monolithic `AppModule`.
+---
 
-### Controllers
+## API Layer
 
-- Location: `src/controllers`
-- Responsibility: routing, DTO/validation boundary, response formatting
+### Endpoint
+GET /form/:formName?search={}&include={}
 
-### Services
+### Responsibilities
+- Accept dynamic `formName`
+- Parse query parameters:
+  - `search` → filtering conditions
+  - `include` → relations to load
+- Forward request to service layer
 
-- Location: `src/services`
-- Responsibility: domain logic, calling repositories/models, transactional orchestration (as applicable)
+---
 
-### Schemas / Models
+## Core Orchestration Layer
 
-- Location: `src/models`
-- Responsibility: Mongoose schema definitions and exported types
-- Shared exports: `src/models/index.ts`
+### FormQueryService (Main Engine)
 
-## Data flow (typical request)
+This service coordinates the full request lifecycle.
 
-1. Request hits a controller route handler.
-2. Controller validates/parses inputs (DTOs/validation when present).
-3. Controller calls a service method with normalized inputs.
-4. Service reads/writes MongoDB via Mongoose models.
-5. Service returns domain result to controller.
-6. Controller maps to HTTP response.
+Responsibilities:
+- Resolve model from `formName`
+- Build query using search parameters
+- Execute MongoDB query
+- Trigger relation resolution if needed
+- Merge and return final response
 
-## Testing strategy
+---
 
-- **Unit/integration** tests use **Jest** (`*.spec.ts`).
-- Prefer Nest’s testing utilities (`@nestjs/testing`) when wiring/injection matters.
-- When changing behavior, update/add tests that demonstrate:
-  - expected output
-  - error cases / validation boundaries
+## Model Registry (Schema Resolver)
 
-## Operational notes (to standardize as project matures)
+### Purpose
+Maps dynamic form names to MongoDB models.
 
-Document these once they exist in the repo:
+### Behavior
+- Input: `formName`
+- Output: Mongoose model instance
 
-- **Configuration**: required env vars (names only), config module approach, defaults for local dev
-- **Database**: how models are registered (`MongooseModule.forFeature`), indexing strategy, migrations strategy (if any)
-- **Observability**: logging format, tracing, metrics, error reporting
-- **API**: versioning strategy, authn/authz approach, OpenAPI/Swagger approach (if added)
+### Responsibilities
+- Validate that model exists
+- Ensure schema is registered
+- Prevent access to undefined collections
 
+---
+
+## Query Builder Layer
+
+### QueryBuilderService
+
+Transforms `search` query string into MongoDB filter objects.
+
+Example:
+
+Input:
+search=name:john,status:active
+
+Output:
+{
+  name: "john",
+  status: "active"
+}
+
+### Responsibilities
+- Parse query parameters
+- Convert to MongoDB-compatible filters
+- Support dynamic fields
+
+---
+
+## Relation Resolver Layer
+
+### RelationResolverService
+
+Handles fetching of relational data based on schema definition and `include` parameter.
+
+### Behavior
+- Reads schema-defined relations (ObjectId references)
+- Checks `include` query parameter
+- Fetches related documents only when requested
+- Uses batching to avoid N+1 queries
+
+### Example
+
+include=customer,items
+
+→ Fetch related customer and items collections
+→ Merge results into base dataset
+
+---
+
+## Data Layer (MongoDB)
+
+### Characteristics
+- Uses Mongoose schemas
+- Each `formName` corresponds to a collection
+- Relations are stored using ObjectId references
+- Schema-driven validation ensures structure consistency
+
+---
+
+## Data Flow (Step-by-Step)
+
+1. Request received:
+   GET /form/orders?search=status:paid&include=customer
+
+2. Controller extracts:
+   - formName = orders
+   - search = status:paid
+   - include = customer
+
+3. ModelRegistry resolves:
+   → orders model
+
+4. QueryBuilder builds Mongo filter:
+   → { status: "paid" }
+
+5. MongoDB fetches base records
+
+6. RelationResolver checks schema:
+   → finds "customer" relation
+
+7. Related data is fetched in batch
+
+8. Data is merged and returned
+
+---
+
+## Key Design Principles
+
+### 1. Schema-driven system
+All behavior is defined by MongoDB schema metadata.
+
+### 2. Fully dynamic routing
+No hardcoded entity endpoints. Everything is resolved via `formName`.
+
+### 3. On-demand relations
+Relations are only fetched if explicitly requested via `include`.
+
+### 4. Stateless request processing
+Each request is independent and fully resolved at runtime.
+
+### 5. Performance-first design
+- Batch relation fetching
+- Avoid N+1 queries
+- Minimal data hydration
+
+---
+
+## Constraints
+
+- Every `formName` must have a registered model
+- Relations must be explicitly defined in schema
+- No raw collection access without registry validation
+- Only requested relations are populated
+
+---
+
+## Architectural Summary
+
+This system is a **dynamic query engine layer on top of MongoDB**, designed to:
+- Handle multiple entity types via a single API
+- Resolve schemas at runtime
+- Dynamically fetch relational data
+- Minimize coupling between API and data models
+
+
+
+                 ┌──────────────┐
+                 │   Client     │
+                 └──────┬───────┘
+                        ↓
+            ┌──────────────────────┐
+            │  FormController      │
+            └────────┬─────────────┘
+                     ↓
+        ┌──────────────────────────┐
+        │ FormQueryService         │
+        └──────┬─────────┬────────┘
+               ↓         ↓
+     ┌────────────┐  ┌──────────────┐
+     │ Model      │  │ QueryBuilder │
+     │ Registry   │  │ Service      │
+     └────┬───────┘  └──────┬───────┘
+          ↓                 ↓
+        MongoDB        Filtered Query
+          ↓
+   ┌──────────────────────────┐
+   │ RelationResolverService  │
+   └──────────┬───────────────┘
+              ↓
+         Hydrated Data
+              ↓
+          Response
