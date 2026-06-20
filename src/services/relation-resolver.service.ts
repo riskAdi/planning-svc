@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { Query, Schema, SchemaType } from 'mongoose';
+import type { FormModelDefinition } from '../form-model.registry';
+import type { PopulateOptions, Query, Schema, SchemaType } from 'mongoose';
 
 function normalizeInclude(input: unknown): string[] {
   if (input === undefined || input === null) return [];
@@ -76,6 +77,18 @@ function getSchemaRefPaths(schema: Schema): Set<string> {
 
 @Injectable()
 export class RelationResolverService {
+  resolveIncludes(
+    definition: FormModelDefinition,
+    include: unknown,
+  ): PopulateOptions[] {
+    const requested = normalizeInclude(include);
+    const allowed = new Set(definition.relations);
+
+    return requested
+      .filter((path) => allowed.has(path))
+      .map((path) => ({ path }));
+  }
+
   parseInclude(include: unknown): string[] {
     return normalizeInclude(include);
   }

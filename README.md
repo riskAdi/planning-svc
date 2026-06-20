@@ -29,6 +29,33 @@
 
 ```bash
 $ pnpm install
+$ cp .env.example .env
+```
+
+## MongoDB container (persistent data)
+
+Start MongoDB in Docker:
+
+```bash
+$ pnpm run db:up
+```
+
+This service reads `MONGODB_URI` from `.env`. Default in `.env.example` is:
+
+```env
+MONGODB_URI=mongodb://localhost:27017/planning
+```
+
+MongoDB data is stored in the named Docker volume `mongodb_data`, so data is preserved across container restarts.
+
+Useful commands:
+
+```bash
+# stop MongoDB container (keeps data)
+$ pnpm run db:down
+
+# remove container + volume (deletes data)
+$ pnpm run db:reset
 ```
 
 ## Compile and run the project

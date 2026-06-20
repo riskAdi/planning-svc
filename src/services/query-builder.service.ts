@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import type { FormModelDefinition } from '../form-model.registry';
 
 type Primitive = string | number | boolean | null;
 type MongoFilter = Record<string, unknown>;
@@ -16,6 +17,48 @@ function coercePrimitive(raw: string): Primitive {
 
 @Injectable()
 export class QueryBuilderService {
+  buildFilter(
+    definition: FormModelDefinition,
+    query: Record<string, string | string[] | undefined>,
+  ): MongoFilter {
+    const filter: MongoFilter = {};
+
+    for (const [key, rawValue] of Object.entries(query)) {
+      if (key === 'search' || key === 'include') {
+        continue;
+      }
+
+      if (rawValue === undefined) {
+        continue;
+      }
+
+      if (Array.isArray(rawValue)) {
+        filter[key] = { $in: rawValue.map((value) => coercePrimitive(value)) };
+      } else {
+        filter[key] = coercePrimitive(rawValue);
+      }
+    }
+
+    const rawSearch = query.search;
+    const search = Array.isArray(rawSearch) ? rawSearch[0] : rawSearch;
+
+    if (search && typeof search === 'string' && search.trim() !== '') {
+      const trimmed = search.trim();
+      if (trimmed.startsWith('{') || trimmed.includes(':')) {
+        Object.assign(filter, this.parseSearch(trimmed));
+      } else if (definition.searchableFields.length > 0) {
+        filter.$or = definition.searchableFields.map((field) => ({
+          [field]: {
+            $regex: trimmed,
+            $options: 'i',
+          },
+        }));
+      }
+    }
+
+    return filter;
+  }
+
   /**
    * Accepts either:
    * - JSON object string: `{"status":"active"}`
