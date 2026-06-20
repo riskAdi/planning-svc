@@ -43,7 +43,16 @@ $ pnpm run db:up
 This service reads `MONGODB_URI` from `.env`. Default in `.env.example` is:
 
 ```env
-MONGODB_URI=mongodb://localhost:27017/planning
+MONGO_ROOT_USERNAME=planning_admin
+MONGO_ROOT_PASSWORD=planning_password
+MONGODB_URI=mongodb://planning_admin:planning_password@localhost:27017/planning?authSource=admin
+```
+
+If you already started MongoDB before enabling auth, run this once to recreate the volume with credentials:
+
+```bash
+$ pnpm run db:reset
+$ pnpm run db:up
 ```
 
 MongoDB data is stored in the named Docker volume `mongodb_data`, so data is preserved across container restarts.

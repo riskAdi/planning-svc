@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 
 import { FormController } from './form.controller';
-import { FormService } from '../services/form.service';
+import { FormQueryService } from '../services/form-query.service';
 
 describe('FormController', () => {
   let controller: FormController;
-  const formService = {
-    findMany: jest.fn(),
-    findOne: jest.fn(),
+  const formQueryService = {
+    find: jest.fn(),
+    create: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -17,8 +17,8 @@ describe('FormController', () => {
       controllers: [FormController],
       providers: [
         {
-          provide: FormService,
-          useValue: formService,
+          provide: FormQueryService,
+          useValue: formQueryService,
         },
       ],
     }).compile();
@@ -27,37 +27,43 @@ describe('FormController', () => {
   });
 
   it('delegates list requests with formName and query', async () => {
-    const expectedResponse = { data: [], meta: { formName: 'customers' } };
-    formService.findMany.mockResolvedValue(expectedResponse);
+    const expectedResponse = [{ id: '1' }];
+    formQueryService.find.mockResolvedValue(expectedResponse);
 
     await expect(
-      controller.findMany('customers', {
-        search: 'john',
-        include: 'orders',
-      }),
+      controller.getFormData('customers', 'john', 'orders'),
     ).resolves.toEqual(expectedResponse);
 
-    expect(formService.findMany).toHaveBeenCalledWith('customers', {
-      search: 'john',
-      include: 'orders',
-    });
+    expect(formQueryService.find).toHaveBeenCalledWith(
+      'customers',
+      'john',
+      'orders',
+    );
   });
 
-  it('delegates record lookup requests with id and include query', async () => {
-    const expectedResponse = {
-      data: { _id: 'abc123' },
-      meta: { formName: 'orders', include: ['customer'] },
-    };
-    formService.findOne.mockResolvedValue(expectedResponse);
+  it('delegates create requests with object payload', async () => {
+    const payload = { firstName: 'Alice' };
+    const expectedResponse = { _id: 'abc123', ...payload };
+    formQueryService.create.mockResolvedValue(expectedResponse);
 
     await expect(
-      controller.findOne('orders', 'abc123', {
-        include: 'customer',
-      }),
+      controller.createFormData('nurse', payload),
     ).resolves.toEqual(expectedResponse);
 
-    expect(formService.findOne).toHaveBeenCalledWith('orders', 'abc123', {
-      include: 'customer',
+    expect(formQueryService.create).toHaveBeenCalledWith('nurse', payload);
+  });
+
+  it('parses text payload as JSON before create', async () => {
+    const payloadText = '{"name":"City Hospital"}';
+    const expectedResponse = { _id: 'h1', name: 'City Hospital' };
+    formQueryService.create.mockResolvedValue(expectedResponse);
+
+    await expect(controller.createFormData('hospitals', payloadText)).resolves.toEqual(
+      expectedResponse,
+    );
+
+    expect(formQueryService.create).toHaveBeenCalledWith('hospitals', {
+      name: 'City Hospital',
     });
   });
 });
