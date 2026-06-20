@@ -142,7 +142,11 @@ export class FormQueryService {
       const relationModel = this.registry.resolveModel(relation.refModelName);
       const sourceItems = Array.isArray(value) ? value : [value];
       const created = await Promise.all(
-        sourceItems.map((item) => relationModel.create(toCreatePayload(item))),
+        sourceItems.map(async (item) => {
+          const relationPayload = toCreatePayload(item);
+          await this.resolveSubforms(relationModel, relationPayload);
+          return relationModel.create(relationPayload);
+        }),
       );
       const relationValue = relation.isArray
         ? created.map((doc) => doc._id)

@@ -130,4 +130,88 @@ describe('FormQueryService', () => {
     });
     expect(response).toEqual({ _id: 'n1', firstName: 'First Name' });
   });
+
+  it('creates recursive subforms for nested relation objects', async () => {
+    const createPatient = jest.fn().mockResolvedValue({ _id: 'p1' });
+    const createHospital = jest.fn().mockResolvedValue({ _id: 'h1' });
+    const createNurse = jest.fn().mockResolvedValue({ _id: 'n1' });
+    const createDoctor = jest.fn().mockResolvedValue({
+      toObject: () => ({ _id: 'd1', first_name: 'Doc' }),
+    });
+
+    const doctorsModel = {
+      schema: {
+        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+          callback('hospital', {
+            options: { ref: 'Hospitals' },
+          });
+          callback('nurse', {
+            options: { ref: 'Nurse' },
+          });
+        },
+      },
+      create: createDoctor,
+    };
+
+    const nurseModel = {
+      schema: {
+        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+          callback('patient', {
+            options: { ref: 'Patients' },
+          });
+        },
+      },
+      create: createNurse,
+    };
+
+    const patientsModel = {
+      create: createPatient,
+    };
+
+    const hospitalsModel = {
+      create: createHospital,
+    };
+
+    const registry = {
+      resolveModel: jest.fn((formName: string) => {
+        if (formName === 'doctors') return doctorsModel;
+        if (formName === 'Hospitals') return hospitalsModel;
+        if (formName === 'Nurse') return nurseModel;
+        if (formName === 'Patients') return patientsModel;
+        throw new Error(`Unexpected model lookup for ${formName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {} as never,
+      {} as never,
+    );
+
+    const response = await service.create('doctors', {
+      first_name: 'Doc',
+      hospital: {
+        name: 'Donnelly and Sons',
+      },
+      nurse: {
+        firstName: 'Elvin',
+        patient: {
+          patient_name: 'Eddy Muneely',
+        },
+      },
+    });
+
+    expect(createPatient).toHaveBeenCalledWith({ patient_name: 'Eddy Muneely' });
+    expect(createNurse).toHaveBeenCalledWith({
+      firstName: 'Elvin',
+      patient: 'p1',
+    });
+    expect(createHospital).toHaveBeenCalledWith({ name: 'Donnelly and Sons' });
+    expect(createDoctor).toHaveBeenCalledWith({
+      first_name: 'Doc',
+      hospital: 'h1',
+      nurse: 'n1',
+    });
+    expect(response).toEqual({ _id: 'd1', first_name: 'Doc' });
+  });
 });
