@@ -2,13 +2,20 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import mongoose from 'mongoose';
 
+import { Customers } from './customers.schema';
+import { OrderProducts } from './orderProducts.schema';
+import { OrderStatus } from './orderStatus.schema';
 
 export type OrdersDocument = HydratedDocument<Orders>;
 
 @Schema({ timestamps: true })
 export class Orders {
-  @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
-  customer: any;
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: Customers.name,
+  })
+  customer: mongoose.Types.ObjectId | Customers;
 
   @Prop({ required: false })
   discountCode: string;
@@ -16,11 +23,19 @@ export class Orders {
   @Prop({ required: false })
   shipping: number;
 
-  @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
-  orderStatus: any;
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: OrderStatus.name,
+  })
+  orderStatus: mongoose.Types.ObjectId | OrderStatus;
 
-  @Prop({ required: false, type: [mongoose.Schema.Types.Mixed] })
-  orderProducts: any[];
+  @Prop({
+    required: false,
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: OrderProducts.name,
+  })
+  orderProducts: Array<mongoose.Types.ObjectId | OrderProducts>;
 
   @Prop({ required: false })
   status: string;

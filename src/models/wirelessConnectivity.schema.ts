@@ -1,8 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-
-export type WirelessConnectivityDocument = HydratedDocument<WirelessConnectivity>;
+export type WirelessConnectivityDocument =
+  HydratedDocument<WirelessConnectivity>;
 
 @Schema({ timestamps: true })
 export class WirelessConnectivity {
@@ -10,4 +10,5 @@ export class WirelessConnectivity {
   name: string;
 }
 
-export const WirelessConnectivitySchema = SchemaFactory.createForClass(WirelessConnectivity);
+export const WirelessConnectivitySchema =
+  SchemaFactory.createForClass(WirelessConnectivity);

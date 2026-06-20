@@ -1,7 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-
 export type ClothingMaterialDocument = HydratedDocument<ClothingMaterial>;
 
 @Schema({ timestamps: true })
@@ -10,4 +9,5 @@ export class ClothingMaterial {
   name: string;
 }
 
-export const ClothingMaterialSchema = SchemaFactory.createForClass(ClothingMaterial);
+export const ClothingMaterialSchema =
+  SchemaFactory.createForClass(ClothingMaterial);
