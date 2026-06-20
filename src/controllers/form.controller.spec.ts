@@ -27,17 +27,29 @@ describe('FormController', () => {
   });
 
   it('delegates list requests with formName and query', async () => {
-    const expectedResponse = [{ id: '1' }];
+    const expectedResponse = {
+      data: [{ id: '1' }],
+      meta: {
+        formName: 'customers',
+        page: 2,
+        limit: 5,
+        total: 9,
+        totalPages: 2,
+        include: ['orders'],
+      },
+    };
     formQueryService.find.mockResolvedValue(expectedResponse);
 
     await expect(
-      controller.getFormData('customers', 'john', 'orders'),
+      controller.getFormData('customers', 'john', 'orders', '2', '5'),
     ).resolves.toEqual(expectedResponse);
 
     expect(formQueryService.find).toHaveBeenCalledWith(
       'customers',
       'john',
       'orders',
+      2,
+      5,
     );
   });
 

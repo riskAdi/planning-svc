@@ -1,6 +1,68 @@
 import { FormQueryService } from './form-query.service';
 
 describe('FormQueryService', () => {
+  it('returns paginated results with metadata', async () => {
+    const exec = jest.fn().mockResolvedValue([{ _id: 'n1' }]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const countExec = jest.fn().mockResolvedValue(11);
+    const nurseModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest.fn().mockReturnValue({ exec: countExec }),
+      schema: { eachPath: jest.fn() },
+    };
+
+    const registry = {
+      resolveModel: jest.fn().mockReturnValue(nurseModel),
+    };
+
+    const queryBuilder = {
+      parseSearch: jest.fn().mockReturnValue({ gender: 'male' }),
+    };
+
+    const relations = {
+      parseInclude: jest.fn().mockReturnValue(['patient', 'hospitals']),
+      applyPopulate: jest.fn(),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      queryBuilder as never,
+      relations as never,
+    );
+
+    const result = await service.find(
+      'nurse',
+      '{"gender":"male"}',
+      'patient,hospitals',
+      2,
+      5,
+    );
+
+    expect(skip).toHaveBeenCalledWith(5);
+    expect(limit).toHaveBeenCalledWith(5);
+    expect(nurseModel.countDocuments).toHaveBeenCalledWith({ gender: 'male' });
+    expect(result).toEqual({
+      data: [{ _id: 'n1' }],
+      meta: {
+        formName: 'nurse',
+        page: 2,
+        limit: 5,
+        total: 11,
+        totalPages: 3,
+        include: ['patient', 'hospitals'],
+      },
+    });
+  });
+
   it('creates nested subforms from schema relation fields and saves parent with references', async () => {
     const createPatient = jest.fn().mockResolvedValue({ _id: 'p1' });
     const createHospital = jest.fn().mockResolvedValue({ _id: 'h1' });

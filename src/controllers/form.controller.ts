@@ -11,8 +11,16 @@ export class FormController {
     @Param('formName') formName: string,
     @Query('search') search?: string,
     @Query('include') include?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.formQuery.find(formName, search, include);
+    return this.formQuery.find(
+      formName,
+      search,
+      include,
+      this.parsePositiveInteger(page, 'page'),
+      this.parsePositiveInteger(limit, 'limit'),
+    );
   }
 
   @Post(':formName')
@@ -41,5 +49,21 @@ export class FormController {
     }
 
     throw new BadRequestException('Payload must be an object');
+  }
+
+  private parsePositiveInteger(
+    value: string | undefined,
+    fieldName: 'page' | 'limit',
+  ): number | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      throw new BadRequestException(`${fieldName} must be a positive integer`);
+    }
+
+    return parsed;
   }
 }

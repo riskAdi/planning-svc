@@ -13,6 +13,21 @@ type RelationInfo = {
   isArray: boolean;
 };
 
+type PaginatedResult = {
+  data: unknown[];
+  meta: {
+    formName: string;
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    include: string[];
+  };
+};
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -71,14 +86,38 @@ export class FormQueryService {
     private readonly relations: RelationResolverService,
   ) {}
 
-  async find(formName: string, search: unknown, include: unknown) {
+  async find(
+    formName: string,
+    search: unknown,
+    include: unknown,
+    page = DEFAULT_PAGE,
+    limit = DEFAULT_LIMIT,
+  ): Promise<PaginatedResult> {
     const model = this.registry.resolveModel(formName);
     const filter = this.queryBuilder.parseSearch(search);
+    const includes = this.relations.parseInclude(include);
+    const skip = (page - 1) * limit;
 
     const query = model.find(filter);
     this.relations.applyPopulate(query, model, include);
+    query.skip(skip).limit(limit);
 
-    return query.lean().exec();
+    const [data, total] = await Promise.all([
+      query.lean().exec(),
+      model.countDocuments(filter).exec(),
+    ]);
+
+    return {
+      data,
+      meta: {
+        formName,
+        page,
+        limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+        include: includes,
+      },
+    };
   }
 
   async create(formName: string, payload: Payload) {
