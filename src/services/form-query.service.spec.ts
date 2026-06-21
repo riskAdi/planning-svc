@@ -1,6 +1,63 @@
 import { FormQueryService } from './form-query.service';
+import { Types } from 'mongoose';
 
 describe('FormQueryService', () => {
+  it('transforms _id to string id while preserving Date values', async () => {
+    const objectId = new Types.ObjectId('6a36e9d7865d1c0de3ec2ee7');
+    const nestedObjectId = new Types.ObjectId('6a36e9d7865d1c0de3ec2ee5');
+    const createdAt = new Date('2026-06-20T19:28:23.753Z');
+
+    const exec = jest.fn().mockResolvedValue([
+      {
+        _id: objectId,
+        firstName: 'First Name',
+        createdAt,
+        patient: {
+          _id: nestedObjectId,
+          admission_date: new Date('2021-09-27T19:00:00.000Z'),
+        },
+      },
+    ]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const model = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
+      schema: { eachPath: jest.fn() },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(model) } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.find('nurse', undefined, undefined);
+
+    expect(result.data).toEqual([
+      {
+        id: '6a36e9d7865d1c0de3ec2ee7',
+        firstName: 'First Name',
+        createdAt: '2026-06-20T19:28:23.753Z',
+        patient: {
+          id: '6a36e9d7865d1c0de3ec2ee5',
+          admission_date: '2021-09-27T19:00:00.000Z',
+        },
+      },
+    ]);
+  });
+
   it('returns paginated results with metadata', async () => {
     const exec = jest.fn().mockResolvedValue([{ _id: 'n1' }]);
     const lean = jest.fn().mockReturnValue({ exec });
@@ -51,7 +108,7 @@ describe('FormQueryService', () => {
     expect(limit).toHaveBeenCalledWith(5);
     expect(nurseModel.countDocuments).toHaveBeenCalledWith({ gender: 'male' });
     expect(result).toEqual({
-      data: [{ _id: 'n1' }],
+      data: [{ id: 'n1' }],
       meta: {
         formName: 'nurse',
         page: 2,
@@ -102,6 +159,7 @@ describe('FormQueryService', () => {
       doctorsModel,
       undefined,
     );
+    expect(result.data).toEqual([{ id: 'd1' }]);
     expect(result.meta.include).toEqual(['hospital', 'nurse']);
   });
 
@@ -176,7 +234,7 @@ describe('FormQueryService', () => {
       patient: 'p1',
       id: 'temp_123',
     });
-    expect(response).toEqual({ _id: 'n1', firstName: 'First Name' });
+    expect(response).toEqual({ id: 'n1', firstName: 'First Name' });
   });
 
   it('creates recursive subforms for nested relation objects', async () => {
@@ -266,6 +324,6 @@ describe('FormQueryService', () => {
       hospital: 'h1',
       nurse: 'n1',
     });
-    expect(response).toEqual({ _id: 'd1', first_name: 'Doc' });
+    expect(response).toEqual({ id: 'd1', first_name: 'Doc' });
   });
 });

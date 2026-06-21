@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Model, SchemaType } from 'mongoose';
+import { Types, type Model, type SchemaType } from 'mongoose';
 
 import { FormModelRegistryService } from './form-model-registry.service';
 import { QueryBuilderService } from './query-builder.service';
@@ -28,8 +28,41 @@ type PaginatedResult = {
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
 
+function transformIds(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => transformIds(item));
+  }
+
+  if (value instanceof Types.ObjectId) {
+    return value.toHexString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const source = value;
+  const target: Record<string, unknown> = {};
+
+  for (const [key, item] of Object.entries(source)) {
+    const nextKey = key === '_id' ? 'id' : key;
+    target[nextKey] = transformIds(item);
+  }
+
+  return target;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function isObjectArray(value: unknown): value is Record<string, unknown>[] {
@@ -108,7 +141,7 @@ export class FormQueryService {
     ]);
 
     return {
-      data,
+      data: transformIds(data) as unknown[],
       meta: {
         formName,
         page,
@@ -127,7 +160,7 @@ export class FormQueryService {
     await this.resolveSubforms(model, normalizedPayload);
 
     const created = await model.create(normalizedPayload);
-    return created.toObject();
+    return transformIds(created.toObject());
   }
 
   private async resolveSubforms(model: Model<any>, payload: Payload) {
