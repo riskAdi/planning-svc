@@ -95,7 +95,7 @@ export class FormQueryService {
   ): Promise<PaginatedResult> {
     const model = this.registry.resolveModel(formName);
     const filter = this.queryBuilder.parseSearch(search);
-    const includes = this.relations.parseInclude(include);
+    const includes = this.relations.resolveIncludePaths(model, include);
     const skip = (page - 1) * limit;
 
     const query = model.find(filter);

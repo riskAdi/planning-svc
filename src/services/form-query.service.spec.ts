@@ -29,7 +29,7 @@ describe('FormQueryService', () => {
     };
 
     const relations = {
-      parseInclude: jest.fn().mockReturnValue(['patient', 'hospitals']),
+      resolveIncludePaths: jest.fn().mockReturnValue(['patient', 'hospitals']),
       applyPopulate: jest.fn(),
     };
 
@@ -63,6 +63,48 @@ describe('FormQueryService', () => {
     });
   });
 
+  it('defaults to all relations when include is omitted', async () => {
+    const exec = jest.fn().mockResolvedValue([{ _id: 'd1' }]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const doctorsModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
+      schema: { eachPath: jest.fn() },
+    };
+
+    const registry = {
+      resolveModel: jest.fn().mockReturnValue(doctorsModel),
+    };
+
+    const relations = {
+      resolveIncludePaths: jest.fn().mockReturnValue(['hospital', 'nurse']),
+      applyPopulate: jest.fn(),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      relations as never,
+    );
+
+    const result = await service.find('doctors', undefined, undefined);
+
+    expect(relations.resolveIncludePaths).toHaveBeenCalledWith(
+      doctorsModel,
+      undefined,
+    );
+    expect(result.meta.include).toEqual(['hospital', 'nurse']);
+  });
+
   it('creates nested subforms from schema relation fields and saves parent with references', async () => {
     const createPatient = jest.fn().mockResolvedValue({ _id: 'p1' });
     const createHospital = jest.fn().mockResolvedValue({ _id: 'h1' });
@@ -86,10 +128,16 @@ describe('FormQueryService', () => {
     };
 
     const patientsModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
       create: createPatient,
     };
 
     const hospitalsModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
       create: createHospital,
     };
 
@@ -165,10 +213,16 @@ describe('FormQueryService', () => {
     };
 
     const patientsModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
       create: createPatient,
     };
 
     const hospitalsModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
       create: createHospital,
     };
 

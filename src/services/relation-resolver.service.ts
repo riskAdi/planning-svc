@@ -77,15 +77,34 @@ function getSchemaRefPaths(schema: Schema): Set<string> {
 
 @Injectable()
 export class RelationResolverService {
+  resolveIncludePaths(
+    model: {
+      schema: Schema;
+    },
+    include: unknown,
+  ): string[] {
+    const requested = normalizeInclude(include);
+    const allowed = [...getSchemaRefPaths(model.schema)].sort();
+
+    if (requested.length === 0) {
+      return allowed;
+    }
+
+    this.validateIncludesOrThrow(model, requested);
+    return requested;
+  }
+
   resolveIncludes(
     definition: FormModelDefinition,
     include: unknown,
   ): PopulateOptions[] {
     const requested = normalizeInclude(include);
-    const allowed = new Set(definition.relations);
+    const allowed =
+      requested.length === 0 ? definition.relations : requested;
+    const allowedSet = new Set(definition.relations);
 
-    return requested
-      .filter((path) => allowed.has(path))
+    return allowed
+      .filter((path) => allowedSet.has(path))
       .map((path) => ({ path }));
   }
 
@@ -118,8 +137,7 @@ export class RelationResolverService {
     },
     include: unknown,
   ): Query<T, unknown> {
-    const includes = normalizeInclude(include);
-    this.validateIncludesOrThrow(model, includes);
+    const includes = this.resolveIncludePaths(model, include);
     for (const path of includes) {
       query.populate(path);
     }

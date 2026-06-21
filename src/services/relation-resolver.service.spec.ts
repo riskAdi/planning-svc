@@ -44,4 +44,11 @@ describe('RelationResolverService', () => {
     expect(query.populate).toHaveBeenCalledWith('customer');
     expect(query.populate).toHaveBeenCalledWith('items');
   });
+
+  it('defaults to all relations when include is omitted', () => {
+    const query = { populate: jest.fn() } as any;
+    svc.applyPopulate(query, model, undefined);
+    expect(query.populate).toHaveBeenCalledWith('customer');
+    expect(query.populate).toHaveBeenCalledWith('items');
+  });
 });

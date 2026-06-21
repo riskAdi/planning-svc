@@ -2,6 +2,11 @@ import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '
 
 import { FormQueryService } from '../services/form-query.service';
 
+type PaginationQuery = {
+  page?: number;
+  limit?: number;
+};
+
 @Controller(['form', 'forms'])
 export class FormController {
   constructor(private readonly formQuery: FormQueryService) {}
@@ -11,15 +16,16 @@ export class FormController {
     @Param('formName') formName: string,
     @Query('search') search?: string,
     @Query('include') include?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query('pagination') pagination?: string,
   ) {
+    const parsedPagination = this.parsePagination(pagination);
+
     return this.formQuery.find(
       formName,
       search,
       include,
-      this.parsePositiveInteger(page, 'page'),
-      this.parsePositiveInteger(limit, 'limit'),
+      parsedPagination.page,
+      parsedPagination.limit,
     );
   }
 
@@ -51,15 +57,43 @@ export class FormController {
     throw new BadRequestException('Payload must be an object');
   }
 
+  private parsePagination(pagination: string | undefined): PaginationQuery {
+    if (pagination === undefined) {
+      return {};
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(pagination) as unknown;
+    } catch {
+      throw new BadRequestException('pagination must be valid JSON');
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new BadRequestException('pagination must be a JSON object');
+    }
+
+    const value = parsed as Record<string, unknown>;
+
+    return {
+      page: this.parsePositiveInteger(value.page, 'page'),
+      limit: this.parsePositiveInteger(value.limit, 'limit'),
+    };
+  }
+
   private parsePositiveInteger(
-    value: string | undefined,
+    value: unknown,
     fieldName: 'page' | 'limit',
   ): number | undefined {
     if (value === undefined) {
       return undefined;
     }
 
-    const parsed = Number.parseInt(value, 10);
+    const parsed =
+      typeof value === 'number'
+        ? value
+        : Number.parseInt(String(value), 10);
+
     if (!Number.isInteger(parsed) || parsed <= 0) {
       throw new BadRequestException(`${fieldName} must be a positive integer`);
     }

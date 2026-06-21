@@ -41,7 +41,12 @@ describe('FormController', () => {
     formQueryService.find.mockResolvedValue(expectedResponse);
 
     await expect(
-      controller.getFormData('customers', 'john', 'orders', '2', '5'),
+      controller.getFormData(
+        'customers',
+        'john',
+        'orders',
+        '{"page":2,"limit":5}',
+      ),
     ).resolves.toEqual(expectedResponse);
 
     expect(formQueryService.find).toHaveBeenCalledWith(
