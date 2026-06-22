@@ -8,6 +8,7 @@ describe('FormController', () => {
   const formQueryService = {
     find: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -81,6 +82,21 @@ describe('FormController', () => {
 
     expect(formQueryService.create).toHaveBeenCalledWith('hospitals', {
       name: 'City Hospital',
+    });
+  });
+
+  it('delegates update requests with parsed payload', async () => {
+    const payloadText = '{"id":"n1","firstName":"Elvin"}';
+    const expectedResponse = { id: 'n1', firstName: 'Elvin' };
+    formQueryService.update.mockResolvedValue(expectedResponse);
+
+    await expect(controller.updateFormData('nurse', payloadText)).resolves.toEqual(
+      expectedResponse,
+    );
+
+    expect(formQueryService.update).toHaveBeenCalledWith('nurse', {
+      id: 'n1',
+      firstName: 'Elvin',
     });
   });
 });

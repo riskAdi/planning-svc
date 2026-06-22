@@ -38,6 +38,15 @@ export class FormController {
     return this.formQuery.create(formName, parsedPayload);
   }
 
+  @Post('update/:formName')
+  async updateFormData(
+    @Param('formName') formName: string,
+    @Body() payload: unknown,
+  ) {
+    const parsedPayload = this.parsePayload(payload);
+    return this.formQuery.update(formName, parsedPayload);
+  }
+
   private parsePayload(payload: unknown): Record<string, unknown> {
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
       return payload as Record<string, unknown>;

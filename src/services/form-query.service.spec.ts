@@ -106,7 +106,16 @@ describe('FormQueryService', () => {
 
     expect(skip).toHaveBeenCalledWith(5);
     expect(limit).toHaveBeenCalledWith(5);
-    expect(nurseModel.countDocuments).toHaveBeenCalledWith({ gender: 'male' });
+    expect(nurseModel.countDocuments).toHaveBeenCalledWith({
+      $or: [
+        {
+          gender: {
+            $regex: 'male',
+            $options: 'i',
+          },
+        },
+      ],
+    });
     expect(result).toEqual({
       data: [{ id: 'n1' }],
       meta: {
@@ -161,6 +170,150 @@ describe('FormQueryService', () => {
     );
     expect(result.data).toEqual([{ id: 'd1' }]);
     expect(result.meta.include).toEqual(['hospital', 'nurse']);
+  });
+
+  it('uses only schema-defined keys and applies OR wildcard regex search', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const doctorsModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          _id: {},
+          first_name: {},
+          last_name: {},
+          phone_number: {},
+        },
+        eachPath: jest.fn(),
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(doctorsModel) } as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          first_name: 'sdf',
+          last_name: 'sdf',
+          phone_number: 'sdf',
+          invalid_key: 'ignore-me',
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'doctors',
+      '{"first_name":"sdf","last_name":"sdf","phone_number":"sdf"}',
+      undefined,
+    );
+
+    expect(doctorsModel.find).toHaveBeenCalledWith({
+      $or: [
+        {
+          first_name: {
+            $regex: 'sdf',
+            $options: 'i',
+          },
+        },
+        {
+          last_name: {
+            $regex: 'sdf',
+            $options: 'i',
+          },
+        },
+        {
+          phone_number: {
+            $regex: 'sdf',
+            $options: 'i',
+          },
+        },
+      ],
+    });
+    expect(doctorsModel.countDocuments).toHaveBeenCalledWith({
+      $or: [
+        {
+          first_name: {
+            $regex: 'sdf',
+            $options: 'i',
+          },
+        },
+        {
+          last_name: {
+            $regex: 'sdf',
+            $options: 'i',
+          },
+        },
+        {
+          phone_number: {
+            $regex: 'sdf',
+            $options: 'i',
+          },
+        },
+      ],
+    });
+  });
+
+  it('supports asterisk wildcard in search values', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const doctorsModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          first_name: {},
+        },
+        eachPath: jest.fn(),
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(doctorsModel) } as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          first_name: 'El*in',
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find('doctors', '{"first_name":"El*in"}', undefined);
+
+    expect(doctorsModel.find).toHaveBeenCalledWith({
+      $or: [
+        {
+          first_name: {
+            $regex: 'El.*in',
+            $options: 'i',
+          },
+        },
+      ],
+    });
   });
 
   it('creates nested subforms from schema relation fields and saves parent with references', async () => {
@@ -325,5 +478,87 @@ describe('FormQueryService', () => {
       nurse: 'n1',
     });
     expect(response).toEqual({ id: 'd1', first_name: 'Doc' });
+  });
+
+  it('updates parent and subforms when ids exist, creates subforms when ids are missing', async () => {
+    const updatePatient = jest.fn().mockResolvedValue({ _id: 'p-updated' });
+    const createHospital = jest.fn().mockResolvedValue({ _id: 'h-created' });
+    const updateNurse = jest.fn().mockResolvedValue({ _id: 'n-updated' });
+
+    const nurseModel = {
+      schema: {
+        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+          callback('patient', {
+            options: { ref: 'Patients' },
+          });
+          callback('hospitals', {
+            options: { ref: 'Hospitals' },
+          });
+        },
+      },
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({ exec: updateNurse }),
+      }),
+    };
+
+    const patientsModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
+      findByIdAndUpdate: jest.fn().mockReturnValue({ exec: updatePatient }),
+      create: jest.fn(),
+    };
+
+    const hospitalsModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
+      findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      create: createHospital,
+    };
+
+    const registry = {
+      resolveModel: jest.fn((formName: string) => {
+        if (formName === 'nurse') return nurseModel;
+        if (formName === 'Patients') return patientsModel;
+        if (formName === 'Hospitals') return hospitalsModel;
+        throw new Error(`Unexpected model lookup for ${formName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {} as never,
+      {} as never,
+    );
+
+    const response = await service.update('nurse', {
+      id: 'nurse-id-1',
+      firstName: 'Elvin',
+      patient: {
+        id: 'patient-id-1',
+        patient_name: 'Updated Patient',
+      },
+      hospitals: {
+        name: 'New Hospital',
+      },
+    });
+
+    expect(patientsModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      'patient-id-1',
+      { patient_name: 'Updated Patient' },
+      { new: true },
+    );
+    expect(createHospital).toHaveBeenCalledWith({ name: 'New Hospital' });
+    expect(nurseModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      'nurse-id-1',
+      {
+        firstName: 'Elvin',
+        patient: 'p-updated',
+        hospitals: 'h-created',
+      },
+      { new: true },
+    );
+    expect(response).toEqual({ id: 'n-updated' });
   });
 });
