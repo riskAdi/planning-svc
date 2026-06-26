@@ -99,4 +99,19 @@ describe('FormController', () => {
       firstName: 'Elvin',
     });
   });
+
+  it('delegates PUT update requests with parsed payload', async () => {
+    const payloadText = '{"id":"n2","firstName":"Ava"}';
+    const expectedResponse = { id: 'n2', firstName: 'Ava' };
+    formQueryService.update.mockResolvedValue(expectedResponse);
+
+    await expect(controller.updateFormDataPut('nurse', payloadText)).resolves.toEqual(
+      expectedResponse,
+    );
+
+    expect(formQueryService.update).toHaveBeenCalledWith('nurse', {
+      id: 'n2',
+      firstName: 'Ava',
+    });
+  });
 });

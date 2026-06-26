@@ -376,7 +376,6 @@ describe('FormQueryService', () => {
       hospitals: {
         name: 'General Hospital',
       },
-      id: 'temp_123',
     });
 
     expect(createPatient).toHaveBeenCalledWith({ patient_name: 'Everett Chesworth' });
@@ -385,7 +384,6 @@ describe('FormQueryService', () => {
       firstName: 'First Name',
       hospitals: 'h1',
       patient: 'p1',
-      id: 'temp_123',
     });
     expect(response).toEqual({ id: 'n1', firstName: 'First Name' });
   });
@@ -496,6 +494,11 @@ describe('FormQueryService', () => {
           });
         },
       },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({ _id: 'nurse-id-1' }),
+        }),
+      }),
       findByIdAndUpdate: jest.fn().mockReturnValue({
         lean: jest.fn().mockReturnValue({ exec: updateNurse }),
       }),
@@ -560,5 +563,309 @@ describe('FormQueryService', () => {
       { new: true },
     );
     expect(response).toEqual({ id: 'n-updated' });
+  });
+
+  it('creates subform record with parent_id when payload contains subform key', async () => {
+    const createEducation = jest.fn().mockResolvedValue({
+      toObject: () => ({ _id: 'e1', title: 'Matric', parent_id: 'c1' }),
+    });
+
+    const customersModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
+    };
+
+    const educationModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
+      create: createEducation,
+    };
+
+    const registry = {
+      resolveModel: jest.fn((formName: string) => {
+        if (formName === 'customers') return customersModel;
+        if (formName === 'education') return educationModel;
+        throw new Error(`Unexpected model lookup for ${formName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {} as never,
+      {} as never,
+    );
+
+    const response = await service.update('customers', {
+      title: 'Matric',
+      university: 'Govt School No 2',
+      year: '2003',
+      country: 'pak',
+      subform: 'education',
+      id: 'c1',
+      multi: true,
+    });
+
+    expect(createEducation).toHaveBeenCalledWith({
+      title: 'Matric',
+      university: 'Govt School No 2',
+      year: '2003',
+      country: 'pak',
+      multi: true,
+      parent_id: 'c1',
+    });
+    expect(response).toEqual({ id: 'e1', title: 'Matric', parent_id: 'c1' });
+  });
+
+  it('creates customer with education as array relation and stores only IDs', async () => {
+    const createEducation = jest
+      .fn()
+      .mockResolvedValue({ _id: 'edu-id-1', title: 'Matric' });
+    const createCustomer = jest.fn().mockResolvedValue({
+      toObject: () => ({
+        _id: 'cust-id-1',
+        first_name: 'John',
+        education: ['edu-id-1'],
+      }),
+    });
+
+    const customersModel = {
+      schema: {
+        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+          callback('education', {
+            caster: { options: { ref: 'Education' } },
+          });
+        },
+      },
+      create: createCustomer,
+    };
+
+    const educationModel = {
+      schema: { eachPath: jest.fn() },
+      create: createEducation,
+    };
+
+    const registry = {
+      resolveModel: jest.fn((formName: string) => {
+        if (formName === 'customers') return customersModel;
+        if (formName === 'Education') return educationModel;
+        throw new Error(`Unexpected model lookup for ${formName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {} as never,
+      {} as never,
+    );
+
+    const response = await service.create('customers', {
+      first_name: 'John',
+      education: {
+        title: 'Matric',
+        university: 'Oxford',
+        year: '2020',
+        country: 'UK',
+      },
+    });
+
+    expect(createEducation).toHaveBeenCalledWith({
+      title: 'Matric',
+      university: 'Oxford',
+      year: '2020',
+      country: 'UK',
+    });
+    expect(createCustomer).toHaveBeenCalledWith({
+      first_name: 'John',
+      education: ['edu-id-1'],
+    });
+    expect(response).toEqual({
+      id: 'cust-id-1',
+      first_name: 'John',
+      education: ['edu-id-1'],
+    });
+  });
+
+  it('create with parent id updates parent and creates nested subform when nested id is missing', async () => {
+    const createEducation = jest.fn().mockResolvedValue({ _id: 'edu-created-1' });
+
+    const customersModel = {
+      schema: {
+        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+          callback('education', {
+            caster: { options: { ref: 'Education' } },
+          });
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1', education: ['edu-old-1'] }) }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1' }) }),
+      }),
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'c1',
+            education: [
+              { _id: 'edu-old-1', title: 'Old' },
+              { _id: 'edu-created-1', title: 'Matric' },
+            ],
+          }),
+        }),
+      }),
+    };
+
+    const educationModel = {
+      schema: { eachPath: jest.fn() },
+      findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      create: createEducation,
+    };
+
+    const registry = {
+      resolveModel: jest.fn((formName: string) => {
+        if (formName === 'customers') return customersModel;
+        if (formName === 'Education') return educationModel;
+        throw new Error(`Unexpected model lookup for ${formName}`);
+      }),
+    };
+
+    const relations = {
+      applyPopulate: jest.fn(),
+      resolveIncludePaths: jest.fn().mockReturnValue([]),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {} as never,
+      relations as never,
+    );
+
+    const response = await service.create('customers', {
+      id: 'c1',
+      education: {
+        title: 'Matric',
+        university: 'SU',
+        year: '2020',
+        country: 'PK',
+      },
+      multi: true,
+    });
+
+    expect(createEducation).toHaveBeenCalledWith({
+      title: 'Matric',
+      university: 'SU',
+      year: '2020',
+      country: 'PK',
+    });
+    expect(customersModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      'c1',
+      {
+        education: ['edu-old-1', 'edu-created-1'],
+        multi: true,
+      },
+      { new: true },
+    );
+    expect(response).toEqual({
+      id: 'c1',
+      education: [
+        { id: 'edu-old-1', title: 'Old' },
+        { id: 'edu-created-1', title: 'Matric' },
+      ],
+    });
+  });
+
+  it('create with parent id appends nested subform when nested id is provided for multi relation', async () => {
+    const createEducation = jest.fn().mockResolvedValue({ _id: 'edu-created-2' });
+
+    const customersModel = {
+      schema: {
+        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+          callback('education', {
+            caster: { options: { ref: 'Education' } },
+          });
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1', education: ['edu-existing-1'] }) }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1' }) }),
+      }),
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'c1',
+            education: [
+              { _id: 'edu-existing-1', title: 'Existing' },
+              { _id: 'edu-created-2', title: 'Matric Updated' },
+            ],
+          }),
+        }),
+      }),
+    };
+
+    const educationModel = {
+      schema: { eachPath: jest.fn() },
+      findByIdAndUpdate: jest.fn(),
+      create: createEducation,
+    };
+
+    const registry = {
+      resolveModel: jest.fn((formName: string) => {
+        if (formName === 'customers') return customersModel;
+        if (formName === 'Education') return educationModel;
+        throw new Error(`Unexpected model lookup for ${formName}`);
+      }),
+    };
+
+    const relations = {
+      applyPopulate: jest.fn(),
+      resolveIncludePaths: jest.fn().mockReturnValue([]),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {} as never,
+      relations as never,
+    );
+
+    const response = await service.create('customers', {
+      id: 'c1',
+      education: {
+        id: 'edu-existing-1',
+        title: 'Matric Updated',
+        university: 'SU',
+        year: '2021',
+        country: 'PK',
+      },
+      multi: true,
+    });
+
+    expect(educationModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    expect(createEducation).toHaveBeenCalledWith(
+      {
+        title: 'Matric Updated',
+        university: 'SU',
+        year: '2021',
+        country: 'PK',
+      },
+    );
+    expect(customersModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      'c1',
+      {
+        education: ['edu-existing-1', 'edu-created-2'],
+        multi: true,
+      },
+      { new: true },
+    );
+    expect(response).toEqual({
+      id: 'c1',
+      education: [
+        { id: 'edu-existing-1', title: 'Existing' },
+        { id: 'edu-created-2', title: 'Matric Updated' },
+      ],
+    });
   });
 });

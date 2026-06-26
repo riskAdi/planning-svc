@@ -1,4 +1,13 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 
 import { FormQueryService } from '../services/form-query.service';
 
@@ -29,6 +38,15 @@ export class FormController {
     );
   }
 
+  @Get(':formName/:id')
+  async getFormDataById(
+    @Param('formName') formName: string,
+    @Param('id') id: string,
+    @Query('include') include?: string,
+  ) {
+    return this.formQuery.findById(formName, id, include);
+  }
+
   @Post(':formName')
   async createFormData(
     @Param('formName') formName: string,
@@ -47,11 +65,35 @@ export class FormController {
     return this.formQuery.update(formName, parsedPayload);
   }
 
+  @Put('update/:formName')
+  async updateFormDataPut(
+    @Param('formName') formName: string,
+    @Body() payload: unknown,
+  ) {
+    const parsedPayload = this.parsePayload(payload);
+    return this.formQuery.update(formName, parsedPayload);
+  }
+
   private parsePayload(payload: unknown): Record<string, unknown> {
+    // Handle already-parsed objects
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
       return payload as Record<string, unknown>;
     }
 
+    // Handle Buffer
+    if (Buffer.isBuffer(payload)) {
+      try {
+        const jsonString = payload.toString('utf-8');
+        const parsed = JSON.parse(jsonString) as unknown;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        throw new BadRequestException('Invalid JSON payload in buffer');
+      }
+    }
+
+    // Handle string
     if (typeof payload === 'string') {
       try {
         const parsed = JSON.parse(payload) as unknown;
