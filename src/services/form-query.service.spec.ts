@@ -776,8 +776,14 @@ describe('FormQueryService', () => {
     });
   });
 
-  it('create with parent id appends nested subform when nested id is provided for multi relation', async () => {
-    const createEducation = jest.fn().mockResolvedValue({ _id: 'edu-created-2' });
+  it('create with parent id updates nested subform when nested id is provided for multi relation', async () => {
+    const findByIdExec = jest
+      .fn()
+      .mockResolvedValueOnce({ _id: 'c1', education: ['edu-existing-1'] })
+      .mockResolvedValueOnce({
+        _id: 'c1',
+        education: [{ _id: 'edu-existing-1', title: 'Matric Updated' }],
+      });
 
     const customersModel = {
       schema: {
@@ -788,28 +794,19 @@ describe('FormQueryService', () => {
         },
       },
       findById: jest.fn().mockReturnValue({
-        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1', education: ['edu-existing-1'] }) }),
+        lean: jest.fn().mockReturnValue({ exec: findByIdExec }),
       }),
       findByIdAndUpdate: jest.fn().mockReturnValue({
         lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1' }) }),
-      }),
-      findById: jest.fn().mockReturnValue({
-        lean: jest.fn().mockReturnValue({
-          exec: jest.fn().mockResolvedValue({
-            _id: 'c1',
-            education: [
-              { _id: 'edu-existing-1', title: 'Existing' },
-              { _id: 'edu-created-2', title: 'Matric Updated' },
-            ],
-          }),
-        }),
       }),
     };
 
     const educationModel = {
       schema: { eachPath: jest.fn() },
-      findByIdAndUpdate: jest.fn(),
-      create: createEducation,
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ _id: 'edu-existing-1' }),
+      }),
+      create: jest.fn(),
     };
 
     const registry = {
@@ -843,19 +840,21 @@ describe('FormQueryService', () => {
       multi: true,
     });
 
-    expect(educationModel.findByIdAndUpdate).not.toHaveBeenCalled();
-    expect(createEducation).toHaveBeenCalledWith(
+    expect(educationModel.findByIdAndUpdate).toHaveBeenCalledWith(
+      'edu-existing-1',
       {
         title: 'Matric Updated',
         university: 'SU',
         year: '2021',
         country: 'PK',
       },
+      { new: true },
     );
+    expect(educationModel.create).not.toHaveBeenCalled();
     expect(customersModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'c1',
       {
-        education: ['edu-existing-1', 'edu-created-2'],
+        education: ['edu-existing-1'],
         multi: true,
       },
       { new: true },
@@ -863,8 +862,7 @@ describe('FormQueryService', () => {
     expect(response).toEqual({
       id: 'c1',
       education: [
-        { id: 'edu-existing-1', title: 'Existing' },
-        { id: 'edu-created-2', title: 'Matric Updated' },
+        { id: 'edu-existing-1', title: 'Matric Updated' },
       ],
     });
   });

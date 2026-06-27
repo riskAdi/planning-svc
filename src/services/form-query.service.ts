@@ -419,7 +419,7 @@ export class FormQueryService {
 
           await this.resolveSubforms(relationModel, relationPayload, allowUpdate);
 
-          if (allowUpdate && relationId && !relation.isArray) {
+          if (allowUpdate && relationId) {
             const updated = await relationModel
               .findByIdAndUpdate(relationId, relationPayload, { new: true })
               .exec();
