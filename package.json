@@ -11,6 +11,7 @@
     "db:up": "docker compose up -d mongodb",
     "db:down": "docker compose stop mongodb",
     "db:reset": "docker compose down -v",
+    "seed:categories": "ts-node scripts/seed-categories.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
