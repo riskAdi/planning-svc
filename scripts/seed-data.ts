@@ -689,6 +689,7 @@ export const clothingStyleData = [
   { name: 'Business & Formal' },
   { name: 'Occasion & Evening' },
   { name: 'Fast Fashion / High street' },
+  { name: 'Fairycore' },
 ];
 
 export const laptopConditionData = [
@@ -696,6 +697,18 @@ export const laptopConditionData = [
   { name: 'New' },
   { name: 'Telco Set' },
   { name: 'Export' },
+];
+
+export const apparelData = [
+  { name: 'Not Specified' },
+  { name: 'Outdoor' },
+  { name: 'Party' },
+  { name: 'Formal' },
+  { name: 'Business' },
+  { name: 'Casual' },
+  { name: 'Beach Wear' },
+  { name: 'Bridal' },
+  { name: 'Semi-formal' },
 ];
 
 export const cpuManufacturerData = [
@@ -757,7 +770,7 @@ export const modelSizeData = [
   { text: 'Fee Size' },
 ];
 
-export const meansTrandData = [
+export const mensTrendData = [
   { name: 'Korean' },
   { name: 'Party' },
   { name: 'Military' },

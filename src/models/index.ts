@@ -24,7 +24,7 @@ export * from './inputOutputPorts.schema';
 export * from './insuranceProviders.schema';
 export * from './laptopCondition.schema';
 export * from './length_class.schema';
-export * from './meansTrand.schema';
+export * from './mensTrend.schema';
 export * from './modelSize.schema';
 export * from './nurse.schema';
 export * from './operatingSystem.schema';

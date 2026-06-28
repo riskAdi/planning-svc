@@ -6,12 +6,13 @@ import { SubCategorySchema } from '../src/models/subCategory.schema';
 import { BatteryLifeSchema } from '../src/models/batteryLife.schema';
 import { ClothingMaterialSchema } from '../src/models/clothingMaterial.schema';
 import { ClothingStyleSchema } from '../src/models/clothingStyle.schema';
+import { ApparelSchema } from '../src/models/apparel.schema';
 import { LaptopConditionSchema } from '../src/models/laptopCondition.schema';
 import { CpuManufacturerSchema } from '../src/models/cpuManufacturer.schema';
 import { CpuSpeedSchema } from '../src/models/cpuSpeed.schema';
 import { ModelSizeSchema } from '../src/models/modelSize.schema';
 import { FitTypeSchema } from '../src/models/fitType.schema';
-import { MeansTrandSchema } from '../src/models/meansTrand.schema';
+import { MensTrendSchema } from '../src/models/mensTrend.schema';
 import { ProcessorTypeSchema } from '../src/models/processorType.schema';
 import { SeasonSchema } from '../src/models/season.schema';
 import { SystemMemorySchema } from '../src/models/systemMemory.schema';
@@ -22,12 +23,13 @@ import {
   batteryLifeData,
   clothingMaterialData,
   clothingStyleData,
+  apparelData,
   laptopConditionData,
   cpuManufacturerData,
   cpuSpeedData,
   modelSizeData,
   fitTypeData,
-  meansTrandData,
+  mensTrendData,
   processorTypeData,
   seasonsData,
   systemMemoryData,
@@ -56,6 +58,7 @@ async function seedDatabase() {
       'ClothingStyle',
       ClothingStyleSchema,
     );
+    const ApparelModel = mongoose.model('Apparel', ApparelSchema);
     const LaptopConditionModel = mongoose.model(
       'LaptopCondition',
       LaptopConditionSchema,
@@ -67,7 +70,7 @@ async function seedDatabase() {
     const CpuSpeedModel = mongoose.model('CpuSpeed', CpuSpeedSchema);
     const ModelSizeModel = mongoose.model('ModelSize', ModelSizeSchema);
     const FitTypeModel = mongoose.model('FitType', FitTypeSchema);
-    const MeansTrandModel = mongoose.model('MeansTrand', MeansTrandSchema);
+    const MensTrendModel = mongoose.model('MensTrend', MensTrendSchema);
     const ProcessorTypeModel = mongoose.model(
       'ProcessorType',
       ProcessorTypeSchema,
@@ -143,6 +146,17 @@ async function seedDatabase() {
       `✓ ClothingStyle seeded (${clothingStyleResults.length} records)`,
     );
 
+    console.log('🌱 Seeding Apparel...');
+    const apparelResults = await Promise.all(
+      apparelData.map((data) =>
+        ApparelModel.findOneAndUpdate({ name: data.name }, data, {
+          upsert: true,
+          returnDocument: 'after',
+        }),
+      ),
+    );
+    console.log(`✓ Apparel seeded (${apparelResults.length} records)`);
+
     console.log('🌱 Seeding LaptopCondition...');
     const laptopConditionResults = await Promise.all(
       laptopConditionData.map((data) =>
@@ -202,16 +216,16 @@ async function seedDatabase() {
     );
     console.log(`✓ FitType seeded (${fitTypeResults.length} records)`);
 
-    console.log('🌱 Seeding MeansTrand...');
-    const meansTrandResults = await Promise.all(
-      meansTrandData.map((data) =>
-        MeansTrandModel.findOneAndUpdate({ name: data.name }, data, {
+    console.log('🌱 Seeding MensTrend...');
+    const mensTrendResults = await Promise.all(
+      mensTrendData.map((data) =>
+        MensTrendModel.findOneAndUpdate({ name: data.name }, data, {
           upsert: true,
           returnDocument: 'after',
         }),
       ),
     );
-    console.log(`✓ MeansTrand seeded (${meansTrandResults.length} records)`);
+    console.log(`✓ MensTrend seeded (${mensTrendResults.length} records)`);
 
     console.log('🌱 Seeding ProcessorType...');
     const processorTypeResults = await Promise.all(

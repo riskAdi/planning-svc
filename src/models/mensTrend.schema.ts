@@ -1,12 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-export type MeansTrandDocument = HydratedDocument<MeansTrand>;
+export type MensTrendDocument = HydratedDocument<MensTrend>;
 
 @Schema({ timestamps: true })
-export class MeansTrand {
+export class MensTrend {
   @Prop({ required: false })
   name: string;
 }
 
-export const MeansTrandSchema = SchemaFactory.createForClass(MeansTrand);
+export const MensTrendSchema = SchemaFactory.createForClass(MensTrend);
