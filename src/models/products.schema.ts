@@ -50,10 +50,17 @@ export class Products {
 
   @Prop({
     required: false,
-    type: mongoose.Schema.Types.ObjectId,
+    type: [mongoose.Schema.Types.ObjectId],
     ref: 'ProductsModel',
   })
-  products_model: mongoose.Types.ObjectId;
+  products_model: mongoose.Types.ObjectId[];
+
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ProductSubscriptions',
+  })
+  productSubscriptions: mongoose.Types.ObjectId;
 }
 
 export const ProductsSchema = SchemaFactory.createForClass(Products);
