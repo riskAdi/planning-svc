@@ -1050,3 +1050,34 @@ export const subCategoryData = [
     },
   },
 ];
+
+// Colors dataset
+export const colorsClassData = [
+  {
+    name: 'Red',
+  },
+  {
+    name: 'Blue',
+  },
+  {
+    name: 'Green',
+  },
+  {
+    name: 'Yellow',
+  },
+  {
+    name: 'Black',
+  },
+  {
+    name: 'Nevy Blue',
+  },
+  {
+    name: 'Yellow2',
+  },
+  {
+    name: 'Black2',
+  },
+  {
+    name: 'White',
+  },
+];

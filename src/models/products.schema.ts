@@ -12,7 +12,7 @@ type ProductImage = {
   [key: string]: unknown;
 };
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, strict: false })
 export class Products {
   @Prop({ required: false })
   name: string;
@@ -48,8 +48,12 @@ export class Products {
   @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
   hoverImage: ProductImage;
 
-  @Prop({ required: false })
-  search: string;
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ProductsModel',
+  })
+  products_model: mongoose.Types.ObjectId;
 }
 
 export const ProductsSchema = SchemaFactory.createForClass(Products);

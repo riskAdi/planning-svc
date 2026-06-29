@@ -17,6 +17,7 @@ import { ProcessorTypeSchema } from '../src/models/processorType.schema';
 import { SeasonSchema } from '../src/models/season.schema';
 import { SystemMemorySchema } from '../src/models/systemMemory.schema';
 import { WirelessConnectivitySchema } from '../src/models/wirelessConnectivity.schema';
+import { ColorsClassSchema } from '../src/models/colorsClass.schema';
 import {
   ageRangeData,
   cameraFrontData,
@@ -36,6 +37,7 @@ import {
   wirelessConnectivityData,
   categoryData,
   subCategoryData,
+  colorsClassData,
 } from './seed-data';
 
 const MONGODB_URI =
@@ -86,6 +88,7 @@ async function seedDatabase() {
     );
     const CategoryModel = mongoose.model('Category', CategorySchema);
     const SubCategoryModel = mongoose.model('SubCategory', SubCategorySchema);
+    const ColorsClassModel = mongoose.model('ColorsClass', ColorsClassSchema);
 
     console.log('🌱 Seeding AgeRange...');
     const ageRangeResults = await Promise.all(
@@ -310,6 +313,17 @@ async function seedDatabase() {
     console.log(
       `✓ SubCategories seeded (${validSubCategories.length} records)`,
     );
+
+    console.log('🌱 Seeding ColorsClass...');
+    const colorsClassResults = await Promise.all(
+      colorsClassData.map((data) =>
+        ColorsClassModel.findOneAndUpdate({ name: data.name }, data, {
+          upsert: true,
+          returnDocument: 'after',
+        }),
+      ),
+    );
+    console.log(`✓ ColorsClass seeded (${colorsClassResults.length} records)`);
 
     console.log('\n✅ All data seeded successfully!');
     process.exit(0);
