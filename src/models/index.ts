@@ -38,6 +38,7 @@ export * from './productModelSize.schema';
 export * from './products_model.schema';
 export * from './productSubscriptions.schema';
 export * from './products.schema';
+export * from './ScopeLookup.schema';
 export * from './season.schema';
 export * from './singup.schema';
 export * from './sizeClass.schema';

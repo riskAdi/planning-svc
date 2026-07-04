@@ -18,6 +18,7 @@ import { SeasonSchema } from '../src/models/season.schema';
 import { SystemMemorySchema } from '../src/models/systemMemory.schema';
 import { WirelessConnectivitySchema } from '../src/models/wirelessConnectivity.schema';
 import { ColorsClassSchema } from '../src/models/colorsClass.schema';
+import { ScopeLookupSchema } from '../src/models/ScopeLookup.schema';
 import {
   ageRangeData,
   cameraFrontData,
@@ -38,6 +39,7 @@ import {
   categoryData,
   subCategoryData,
   colorsClassData,
+  scopeLookupData,
 } from './seed-data';
 
 const MONGODB_URI =
@@ -89,6 +91,7 @@ async function seedDatabase() {
     const CategoryModel = mongoose.model('Category', CategorySchema);
     const SubCategoryModel = mongoose.model('SubCategory', SubCategorySchema);
     const ColorsClassModel = mongoose.model('ColorsClass', ColorsClassSchema);
+    const ScopeLookupModel = mongoose.model('ScopeLookup', ScopeLookupSchema);
 
     console.log('🌱 Seeding AgeRange...');
     const ageRangeResults = await Promise.all(
@@ -324,6 +327,17 @@ async function seedDatabase() {
       ),
     );
     console.log(`✓ ColorsClass seeded (${colorsClassResults.length} records)`);
+
+    console.log('🌱 Seeding ScopeLookup...');
+    const scopeLookupResults = await Promise.all(
+      scopeLookupData.map((data) =>
+        ScopeLookupModel.findOneAndUpdate({ slug: data.slug }, data, {
+          upsert: true,
+          returnDocument: 'after',
+        }),
+      ),
+    );
+    console.log(`✓ ScopeLookup seeded (${scopeLookupResults.length} records)`);
 
     console.log('\n✅ All data seeded successfully!');
     process.exit(0);

@@ -1081,3 +1081,19 @@ export const colorsClassData = [
     name: 'White',
   },
 ];
+
+// Scope lookup dataset
+export const scopeLookupData = [
+  {
+    name: 'SKU',
+    slug: 'sku',
+  },
+  {
+    name: 'ON_PURCHASE_TOTAL',
+    slug: 'purchase',
+  },
+  {
+    name: 'CUSTOMER_SEGMENT',
+    slug: 'customer_segment',
+  },
+];
