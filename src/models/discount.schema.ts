@@ -3,6 +3,7 @@ import { HydratedDocument } from 'mongoose';
 import mongoose from 'mongoose';
 
 import { DiscountRule } from './discountRule.schema';
+import { Products } from './products.schema';
 
 export type DiscountDocument = HydratedDocument<Discount>;
 
@@ -21,14 +22,18 @@ export class Discount {
   })
   discount_rule: Array<mongoose.Types.ObjectId | DiscountRule>;
 
-  @Prop({ required: false, type: [mongoose.Schema.Types.Mixed] })
-  product_list: any[];
+  @Prop({
+    required: false,
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: Products.name,
+  })
+  product_list: Array<mongoose.Types.ObjectId | Products>;
 
   @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
   productDiscount: any;
 
-  @Prop({ required: false })
-  dateRange: Date;
+  @Prop({ required: false, type: [Date] })
+  dateRange: Date[];
 
   @Prop({ required: false, type: [mongoose.Schema.Types.Mixed] })
   status: any[];

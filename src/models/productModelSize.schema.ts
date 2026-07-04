@@ -20,6 +20,13 @@ export class ProductModelSize {
 
   @Prop({ required: false })
   stock: number;
+
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ModelSize',
+  })
+  size: mongoose.Types.ObjectId;
 }
 
 export const ProductModelSizeSchema =
