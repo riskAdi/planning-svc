@@ -8,23 +8,24 @@ export type DiscountRuleDocument = HydratedDocument<DiscountRule>;
 @Schema({ timestamps: true })
 export class DiscountRule {
   @Prop({
-    required: false,
+    required: true,
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ScopeLookup',
   })
   scope: mongoose.Types.ObjectId;
 
-  @Prop({ required: false })
-  min_discount_amount: number;
+  @Prop({
+    required: true,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'RuleLookup',
+  })
+  rule: mongoose.Types.ObjectId;
 
-  @Prop({ required: false })
-  min_discount_quantity: number;
-
-  @Prop({ required: false, type: [mongoose.Schema.Types.Mixed] })
-  toggleDiscount: any[];
+  @Prop({ required: true })
+  ruleValue: string;
 
   @Prop({
-    required: false,
+    required: true,
     type: mongoose.Schema.Types.ObjectId,
     ref: DiscountBenefits.name,
   })

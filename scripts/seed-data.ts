@@ -1097,3 +1097,15 @@ export const scopeLookupData = [
     slug: 'customer_segment',
   },
 ];
+
+// Rule lookup dataset
+export const ruleLookupData = [
+  {
+    name: 'MIN_CART_QUANTITY',
+    slug: 'min_cart_quantity',
+  },
+  {
+    name: 'MIN_CART_TOTAL_AMOUNT',
+    slug: 'min_cart_total',
+  },
+];

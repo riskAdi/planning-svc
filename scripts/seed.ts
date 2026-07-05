@@ -19,6 +19,7 @@ import { SystemMemorySchema } from '../src/models/systemMemory.schema';
 import { WirelessConnectivitySchema } from '../src/models/wirelessConnectivity.schema';
 import { ColorsClassSchema } from '../src/models/colorsClass.schema';
 import { ScopeLookupSchema } from '../src/models/ScopeLookup.schema';
+import { RuleLookupSchema } from '../src/models/ruleLookup.schema';
 import {
   ageRangeData,
   cameraFrontData,
@@ -40,6 +41,7 @@ import {
   subCategoryData,
   colorsClassData,
   scopeLookupData,
+  ruleLookupData,
 } from './seed-data';
 
 const MONGODB_URI =
@@ -91,7 +93,14 @@ async function seedDatabase() {
     const CategoryModel = mongoose.model('Category', CategorySchema);
     const SubCategoryModel = mongoose.model('SubCategory', SubCategorySchema);
     const ColorsClassModel = mongoose.model('ColorsClass', ColorsClassSchema);
-    const ScopeLookupModel = mongoose.model('ScopeLookup', ScopeLookupSchema);
+    const ScopeLookupModel = mongoose.model(
+      'ScopeLookup',
+      ScopeLookupSchema as mongoose.Schema,
+    );
+    const RuleLookupModel = mongoose.model(
+      'RuleLookup',
+      RuleLookupSchema as mongoose.Schema,
+    );
 
     console.log('🌱 Seeding AgeRange...');
     const ageRangeResults = await Promise.all(
@@ -338,6 +347,17 @@ async function seedDatabase() {
       ),
     );
     console.log(`✓ ScopeLookup seeded (${scopeLookupResults.length} records)`);
+
+    console.log('🌱 Seeding RuleLookup...');
+    const ruleLookupResults = await Promise.all(
+      ruleLookupData.map((data) =>
+        RuleLookupModel.findOneAndUpdate({ slug: data.slug }, data, {
+          upsert: true,
+          returnDocument: 'after',
+        }),
+      ),
+    );
+    console.log(`✓ RuleLookup seeded (${ruleLookupResults.length} records)`);
 
     console.log('\n✅ All data seeded successfully!');
     process.exit(0);
