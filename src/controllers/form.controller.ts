@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Put,
@@ -26,8 +27,11 @@ export class FormController {
     @Query('search') search?: string,
     @Query('include') include?: string,
     @Query('pagination') pagination?: string,
+    @Headers('x-user-role') userRole?: string,
+    @Headers('x-role') fallbackRole?: string,
   ) {
     const parsedPagination = this.parsePagination(pagination);
+    const role = this.resolveRole(userRole, fallbackRole);
 
     return this.formQuery.find(
       formName,
@@ -35,6 +39,7 @@ export class FormController {
       include,
       parsedPagination.page,
       parsedPagination.limit,
+      role,
     );
   }
 
@@ -43,35 +48,55 @@ export class FormController {
     @Param('formName') formName: string,
     @Param('id') id: string,
     @Query('include') include?: string,
+    @Headers('x-user-role') userRole?: string,
+    @Headers('x-role') fallbackRole?: string,
   ) {
-    return this.formQuery.findById(formName, id, include);
+    const role = this.resolveRole(userRole, fallbackRole);
+    return this.formQuery.findById(formName, id, include, role);
   }
 
   @Post(':formName')
   async createFormData(
     @Param('formName') formName: string,
     @Body() payload: unknown,
+    @Headers('x-user-role') userRole?: string,
+    @Headers('x-role') fallbackRole?: string,
   ) {
     const parsedPayload = this.parsePayload(payload);
-    return this.formQuery.create(formName, parsedPayload);
+    const role = this.resolveRole(userRole, fallbackRole);
+    return this.formQuery.create(formName, parsedPayload, role);
   }
 
   @Post('update/:formName')
   async updateFormData(
     @Param('formName') formName: string,
     @Body() payload: unknown,
+    @Headers('x-user-role') userRole?: string,
+    @Headers('x-role') fallbackRole?: string,
   ) {
     const parsedPayload = this.parsePayload(payload);
-    return this.formQuery.update(formName, parsedPayload);
+    const role = this.resolveRole(userRole, fallbackRole);
+    return this.formQuery.update(formName, parsedPayload, role);
   }
 
   @Put('update/:formName')
   async updateFormDataPut(
     @Param('formName') formName: string,
     @Body() payload: unknown,
+    @Headers('x-user-role') userRole?: string,
+    @Headers('x-role') fallbackRole?: string,
   ) {
     const parsedPayload = this.parsePayload(payload);
-    return this.formQuery.update(formName, parsedPayload);
+    const role = this.resolveRole(userRole, fallbackRole);
+    return this.formQuery.update(formName, parsedPayload, role);
+  }
+
+  private resolveRole(
+    primaryRole: string | undefined,
+    fallbackRole: string | undefined,
+  ): string | undefined {
+    const role = (primaryRole ?? fallbackRole ?? 'nurse')?.trim();
+    return role ? role.toLowerCase() : undefined;
   }
 
   private parsePayload(payload: unknown): Record<string, unknown> {

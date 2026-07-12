@@ -866,4 +866,269 @@ describe('FormQueryService', () => {
       ],
     });
   });
+
+  it('filters response fields by read permissions for the provided role', async () => {
+    const exec = jest.fn().mockResolvedValue([
+      {
+        _id: 'n1',
+        firstName: 'Ava',
+        phoneNumber: '+1 555 123',
+      },
+    ]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+
+    const nurseModel = {
+      find: jest.fn().mockReturnValue({ skip, limit, lean }),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
+      schema: {
+        formPermissions: {
+          form: { read: ['nurse', 'patient'] },
+          fields: {
+            firstName: { read: ['nurse', 'patient'] },
+            phoneNumber: { read: ['patient'] },
+          },
+        },
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(nurseModel) } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.find('nurse', undefined, undefined, 1, 20, 'nurse');
+
+    expect(result.data).toEqual([
+      {
+        id: 'n1',
+        firstName: 'Ava',
+      },
+    ]);
+  });
+
+  it('throws forbidden when payload includes fields role cannot write', async () => {
+    const nurseModel = {
+      schema: {
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { write: ['nurse', 'patient'] },
+          fields: {
+            firstName: { write: ['nurse', 'patient'] },
+            lastName: { write: ['nurse'] },
+          },
+        },
+      },
+      create: jest.fn(),
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(nurseModel) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.create(
+        'nurse',
+        {
+          firstName: 'Ava',
+          lastName: 'Smith',
+        },
+        'patient',
+      ),
+    ).rejects.toThrow('is not authorized to write fields');
+
+    expect(nurseModel.create).not.toHaveBeenCalled();
+  });
+
+  it('allows create payload fields missing from field permissions map', async () => {
+    const nurseModel = {
+      schema: {
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { write: ['nurse'] },
+          fields: {
+            firstName: { write: ['nurse'] },
+          },
+        },
+      },
+      create: jest.fn().mockResolvedValue({
+        _id: 'n1',
+        toObject: () => ({
+          _id: 'n1',
+          firstName: 'Ava',
+          gender: 'female',
+        }),
+      }),
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(nurseModel) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.create(
+        'nurse',
+        {
+          firstName: 'Ava',
+          gender: 'female',
+        },
+        'nurse',
+      ),
+    ).resolves.toEqual({
+      id: 'n1',
+      firstName: 'Ava',
+      gender: 'female',
+    });
+
+    expect(nurseModel.create).toHaveBeenCalledWith({
+      firstName: 'Ava',
+      gender: 'female',
+    });
+  });
+
+  it('allows update payload fields missing from edit permissions map', async () => {
+    const nurseModel = {
+      schema: {
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { edit: ['nurse'] },
+          fields: {
+            firstName: { edit: ['nurse'] },
+          },
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'n1' }) }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'n1',
+            firstName: 'Ava',
+            gender: 'female',
+          }),
+        }),
+      }),
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(nurseModel) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.update(
+        'nurse',
+        {
+          id: 'n1',
+          firstName: 'Ava',
+          gender: 'female',
+        },
+        'nurse',
+      ),
+    ).resolves.toEqual({
+      id: 'n1',
+      firstName: 'Ava',
+      gender: 'female',
+    });
+
+    expect(nurseModel.findByIdAndUpdate).toHaveBeenCalled();
+  });
+
+  it('throws forbidden when role is not allowed to read form', async () => {
+    const nurseModel = {
+      find: jest.fn(),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        formPermissions: {
+          form: { read: ['nurse'] },
+        },
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(nurseModel) } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await expect(
+      service.find('nurse', undefined, undefined, 1, 20, 'patient'),
+    ).rejects.toThrow('is not authorized to read form');
+
+    expect(nurseModel.find).not.toHaveBeenCalled();
+  });
+
+  it('throws forbidden when role is not allowed to write form', async () => {
+    const nurseModel = {
+      schema: {
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { write: ['nurse'] },
+          fields: {
+            firstName: { write: ['nurse'] },
+          },
+        },
+      },
+      create: jest.fn(),
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(nurseModel) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.create('nurse', { firstName: 'Ava' }, 'patient'),
+    ).rejects.toThrow('is not authorized to write form');
+
+    expect(nurseModel.create).not.toHaveBeenCalled();
+  });
+
+  it('throws forbidden when role is not allowed to edit form', async () => {
+    const nurseModel = {
+      schema: {
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { edit: ['nurse'] },
+          fields: {
+            firstName: { edit: ['nurse'] },
+          },
+        },
+      },
+      findById: jest.fn(),
+      findByIdAndUpdate: jest.fn(),
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(nurseModel) } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.update('nurse', { id: 'n1', firstName: 'Ava' }, 'patient'),
+    ).rejects.toThrow('is not authorized to edit form');
+
+    expect(nurseModel.findById).not.toHaveBeenCalled();
+    expect(nurseModel.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
 });

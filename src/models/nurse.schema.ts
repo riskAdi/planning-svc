@@ -7,6 +7,47 @@ import { Hospitals } from './hospitals.schema';
 
 export type NurseDocument = HydratedDocument<Nurse>;
 
+export type RolePermissions = {
+  read?: string[];
+  write?: string[];
+  edit?: string[];
+  delete?: string[];
+};
+
+export type FormPermissions = {
+  form: RolePermissions;
+  fields: Record<string, RolePermissions>;
+};
+
+export const NursePermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse'],
+    edit: ['nurse'],
+    delete: ['nurse'],
+  },
+  fields: {
+    firstName: {
+      read: ['nurse', 'patient'],
+      write: ['nurse', 'patient'],
+      edit: ['nurse', 'patient'],
+      delete: ['nurse', 'patient'],
+    },
+    lastName: {
+      read: ['patient'],
+      write: ['nurse'],
+      edit: ['nurse'],
+      delete: ['nurse'],
+    },
+    phoneNumber: {
+      read: ['nurse'],
+      write: ['nurse'],
+      edit: ['nurse'],
+      delete: ['nurse'],
+    },
+  },
+};
+
 @Schema({ timestamps: true })
 export class Nurse {
   @Prop({ required: false })
@@ -58,3 +99,6 @@ export class Nurse {
 }
 
 export const NurseSchema = SchemaFactory.createForClass(Nurse);
+
+(NurseSchema as typeof NurseSchema & { formPermissions?: FormPermissions }).formPermissions =
+  NursePermissions;
