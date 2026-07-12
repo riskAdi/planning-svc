@@ -10,3 +10,15 @@ export class GraphicCard {
 }
 
 export const GraphicCardSchema = SchemaFactory.createForClass(GraphicCard);
+
+import type { FormPermissions } from './permissions.types';
+
+export const GraphicCardPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  GraphicCardSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = GraphicCardPermissions;

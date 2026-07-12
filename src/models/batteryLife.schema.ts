@@ -10,3 +10,15 @@ export class BatteryLife {
 }
 
 export const BatteryLifeSchema = SchemaFactory.createForClass(BatteryLife);
+
+import type { FormPermissions } from './permissions.types';
+
+export const BatteryLifePermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  BatteryLifeSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = BatteryLifePermissions;

@@ -65,9 +65,9 @@ describe('FormController', () => {
     const expectedResponse = { _id: 'abc123', ...payload };
     formQueryService.create.mockResolvedValue(expectedResponse);
 
-    await expect(
-      controller.createFormData('nurse', payload),
-    ).resolves.toEqual(expectedResponse);
+    await expect(controller.createFormData('nurse', payload)).resolves.toEqual(
+      expectedResponse,
+    );
 
     expect(formQueryService.create).toHaveBeenCalledWith(
       'nurse',
@@ -81,13 +81,17 @@ describe('FormController', () => {
     const expectedResponse = { _id: 'h1', name: 'City Hospital' };
     formQueryService.create.mockResolvedValue(expectedResponse);
 
-    await expect(controller.createFormData('hospitals', payloadText)).resolves.toEqual(
-      expectedResponse,
-    );
+    await expect(
+      controller.createFormData('hospitals', payloadText),
+    ).resolves.toEqual(expectedResponse);
 
-    expect(formQueryService.create).toHaveBeenCalledWith('hospitals', {
-      name: 'City Hospital',
-    }, 'nurse');
+    expect(formQueryService.create).toHaveBeenCalledWith(
+      'hospitals',
+      {
+        name: 'City Hospital',
+      },
+      'nurse',
+    );
   });
 
   it('delegates update requests with parsed payload', async () => {
@@ -95,14 +99,18 @@ describe('FormController', () => {
     const expectedResponse = { id: 'n1', firstName: 'Elvin' };
     formQueryService.update.mockResolvedValue(expectedResponse);
 
-    await expect(controller.updateFormData('nurse', payloadText)).resolves.toEqual(
-      expectedResponse,
-    );
+    await expect(
+      controller.updateFormData('nurse', payloadText),
+    ).resolves.toEqual(expectedResponse);
 
-    expect(formQueryService.update).toHaveBeenCalledWith('nurse', {
-      id: 'n1',
-      firstName: 'Elvin',
-    }, 'nurse');
+    expect(formQueryService.update).toHaveBeenCalledWith(
+      'nurse',
+      {
+        id: 'n1',
+        firstName: 'Elvin',
+      },
+      'nurse',
+    );
   });
 
   it('delegates PUT update requests with parsed payload', async () => {
@@ -110,13 +118,17 @@ describe('FormController', () => {
     const expectedResponse = { id: 'n2', firstName: 'Ava' };
     formQueryService.update.mockResolvedValue(expectedResponse);
 
-    await expect(controller.updateFormDataPut('nurse', payloadText)).resolves.toEqual(
-      expectedResponse,
-    );
+    await expect(
+      controller.updateFormDataPut('nurse', payloadText),
+    ).resolves.toEqual(expectedResponse);
 
-    expect(formQueryService.update).toHaveBeenCalledWith('nurse', {
-      id: 'n2',
-      firstName: 'Ava',
-    }, 'nurse');
+    expect(formQueryService.update).toHaveBeenCalledWith(
+      'nurse',
+      {
+        id: 'n2',
+        firstName: 'Ava',
+      },
+      'nurse',
+    );
   });
 });

@@ -64,3 +64,28 @@ export class Products {
 }
 
 export const ProductsSchema = SchemaFactory.createForClass(Products);
+
+import type { FormPermissions } from './permissions.types';
+
+export const ProductsPermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse'],
+    edit: ['nurse'],
+    delete: ['nurse'],
+  },
+  fields: {
+    name: ['nurse', 'patient'],
+    sku: ['nurse', 'patient'],
+    price: ['nurse', 'patient'],
+    specialPrice: ['nurse', 'patient'],
+    saleLabel: ['nurse', 'patient'],
+    category: ['nurse', 'patient'],
+    mainImage: ['nurse', 'patient'],
+    hoverImage: ['nurse', 'patient'],
+  },
+};
+
+(
+  ProductsSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = ProductsPermissions;

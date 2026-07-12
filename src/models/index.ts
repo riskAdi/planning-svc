@@ -27,6 +27,7 @@ export * from './length_class.schema';
 export * from './mensTrend.schema';
 export * from './modelSize.schema';
 export * from './nurse.schema';
+export * from './permissions.types';
 export * from './operatingSystem.schema';
 export * from './orderProducts.schema';
 export * from './orders.schema';

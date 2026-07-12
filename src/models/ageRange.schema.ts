@@ -10,3 +10,15 @@ export class AgeRange {
 }
 
 export const AgeRangeSchema = SchemaFactory.createForClass(AgeRange);
+
+import type { FormPermissions } from './permissions.types';
+
+export const AgeRangePermissions: FormPermissions = {
+  fields: {
+    text: ['nurse', 'patient'],
+  },
+};
+
+(
+  AgeRangeSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = AgeRangePermissions;

@@ -11,3 +11,15 @@ export class InputOutputPorts {
 
 export const InputOutputPortsSchema =
   SchemaFactory.createForClass(InputOutputPorts);
+
+import type { FormPermissions } from './permissions.types';
+
+export const InputOutputPortsPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  InputOutputPortsSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = InputOutputPortsPermissions;

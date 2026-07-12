@@ -30,7 +30,9 @@ describe('FormQueryService', () => {
 
     const model = {
       find: jest.fn().mockReturnValue(query),
-      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
       schema: { eachPath: jest.fn() },
     };
 
@@ -143,7 +145,9 @@ describe('FormQueryService', () => {
 
     const doctorsModel = {
       find: jest.fn().mockReturnValue(query),
-      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
       schema: { eachPath: jest.fn() },
     };
 
@@ -186,7 +190,9 @@ describe('FormQueryService', () => {
 
     const doctorsModel = {
       find: jest.fn().mockReturnValue(query),
-      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
       schema: {
         paths: {
           _id: {},
@@ -280,7 +286,9 @@ describe('FormQueryService', () => {
 
     const doctorsModel = {
       find: jest.fn().mockReturnValue(query),
-      countDocuments: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
       schema: {
         paths: {
           first_name: {},
@@ -325,7 +333,9 @@ describe('FormQueryService', () => {
 
     const nurseModel = {
       schema: {
-        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
           callback('patient', {
             options: { ref: 'Patients' },
           });
@@ -378,7 +388,9 @@ describe('FormQueryService', () => {
       },
     });
 
-    expect(createPatient).toHaveBeenCalledWith({ patient_name: 'Everett Chesworth' });
+    expect(createPatient).toHaveBeenCalledWith({
+      patient_name: 'Everett Chesworth',
+    });
     expect(createHospital).toHaveBeenCalledWith({ name: 'General Hospital' });
     expect(createNurse).toHaveBeenCalledWith({
       firstName: 'First Name',
@@ -398,7 +410,9 @@ describe('FormQueryService', () => {
 
     const doctorsModel = {
       schema: {
-        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
           callback('hospital', {
             options: { ref: 'Hospitals' },
           });
@@ -412,7 +426,9 @@ describe('FormQueryService', () => {
 
     const nurseModel = {
       schema: {
-        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
           callback('patient', {
             options: { ref: 'Patients' },
           });
@@ -464,7 +480,9 @@ describe('FormQueryService', () => {
       },
     });
 
-    expect(createPatient).toHaveBeenCalledWith({ patient_name: 'Eddy Muneely' });
+    expect(createPatient).toHaveBeenCalledWith({
+      patient_name: 'Eddy Muneely',
+    });
     expect(createNurse).toHaveBeenCalledWith({
       firstName: 'Elvin',
       patient: 'p1',
@@ -485,7 +503,9 @@ describe('FormQueryService', () => {
 
     const nurseModel = {
       schema: {
-        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
           callback('patient', {
             options: { ref: 'Patients' },
           });
@@ -516,7 +536,9 @@ describe('FormQueryService', () => {
       schema: {
         eachPath: jest.fn(),
       },
-      findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      findByIdAndUpdate: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
       create: createHospital,
     };
 
@@ -632,7 +654,9 @@ describe('FormQueryService', () => {
 
     const customersModel = {
       schema: {
-        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
           callback('education', {
             caster: { options: { ref: 'Education' } },
           });
@@ -688,38 +712,46 @@ describe('FormQueryService', () => {
   });
 
   it('create with parent id updates parent and creates nested subform when nested id is missing', async () => {
-    const createEducation = jest.fn().mockResolvedValue({ _id: 'edu-created-1' });
+    const createEducation = jest
+      .fn()
+      .mockResolvedValue({ _id: 'edu-created-1' });
 
     const customersModel = {
       schema: {
-        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
           callback('education', {
             caster: { options: { ref: 'Education' } },
           });
         },
       },
-      findById: jest.fn().mockReturnValue({
-        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1', education: ['edu-old-1'] }) }),
-      }),
       findByIdAndUpdate: jest.fn().mockReturnValue({
-        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1' }) }),
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({ _id: 'c1' }),
+        }),
       }),
       findById: jest.fn().mockReturnValue({
         lean: jest.fn().mockReturnValue({
-          exec: jest.fn().mockResolvedValue({
-            _id: 'c1',
-            education: [
-              { _id: 'edu-old-1', title: 'Old' },
-              { _id: 'edu-created-1', title: 'Matric' },
-            ],
-          }),
+          exec: jest
+            .fn()
+            .mockResolvedValueOnce({ _id: 'c1', education: ['edu-old-1'] })
+            .mockResolvedValueOnce({
+              _id: 'c1',
+              education: [
+                { _id: 'edu-old-1', title: 'Old' },
+                { _id: 'edu-created-1', title: 'Matric' },
+              ],
+            }),
         }),
       }),
     };
 
     const educationModel = {
       schema: { eachPath: jest.fn() },
-      findByIdAndUpdate: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
+      findByIdAndUpdate: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(null) }),
       create: createEducation,
     };
 
@@ -787,7 +819,9 @@ describe('FormQueryService', () => {
 
     const customersModel = {
       schema: {
-        eachPath: (callback: (pathName: string, schemaType: unknown) => void) => {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
           callback('education', {
             caster: { options: { ref: 'Education' } },
           });
@@ -797,7 +831,9 @@ describe('FormQueryService', () => {
         lean: jest.fn().mockReturnValue({ exec: findByIdExec }),
       }),
       findByIdAndUpdate: jest.fn().mockReturnValue({
-        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'c1' }) }),
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({ _id: 'c1' }),
+        }),
       }),
     };
 
@@ -861,9 +897,7 @@ describe('FormQueryService', () => {
     );
     expect(response).toEqual({
       id: 'c1',
-      education: [
-        { id: 'edu-existing-1', title: 'Matric Updated' },
-      ],
+      education: [{ id: 'edu-existing-1', title: 'Matric Updated' }],
     });
   });
 
@@ -904,7 +938,14 @@ describe('FormQueryService', () => {
       } as never,
     );
 
-    const result = await service.find('nurse', undefined, undefined, 1, 20, 'nurse');
+    const result = await service.find(
+      'nurse',
+      undefined,
+      undefined,
+      1,
+      20,
+      'nurse',
+    );
 
     expect(result.data).toEqual([
       {
@@ -1009,7 +1050,9 @@ describe('FormQueryService', () => {
         },
       },
       findById: jest.fn().mockReturnValue({
-        lean: jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'n1' }) }),
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({ _id: 'n1' }),
+        }),
       }),
       findByIdAndUpdate: jest.fn().mockReturnValue({
         lean: jest.fn().mockReturnValue({

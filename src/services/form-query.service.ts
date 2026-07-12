@@ -92,14 +92,18 @@ function isObjectArray(value: unknown): value is Record<string, unknown>[] {
   );
 }
 
-function toCreatePayload(input: Record<string, unknown>): Record<string, unknown> {
+function toCreatePayload(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
   const result = { ...input };
   delete result.id;
   delete result._id;
   return result;
 }
 
-function getEntityId(input: Record<string, unknown>): string | Types.ObjectId | undefined {
+function getEntityId(
+  input: Record<string, unknown>,
+): string | Types.ObjectId | undefined {
   const rawId = input.id ?? input._id;
   if (typeof rawId === 'string' && rawId.trim() !== '') {
     return rawId;
@@ -156,10 +160,7 @@ function toSchemaMatchedFilter(
     Object.keys(schemaPaths).forEach((path) => allowedPaths.add(path));
   }
 
-  if (
-    allowedPaths.size === 0 &&
-    typeof model.schema.eachPath === 'function'
-  ) {
+  if (allowedPaths.size === 0 && typeof model.schema.eachPath === 'function') {
     model.schema.eachPath((pathName: string) => {
       allowedPaths.add(pathName);
     });
@@ -279,9 +280,7 @@ function isRoleAllowed(
 }
 
 function getModelPermissions(model: Model<any>): PermissionMap | undefined {
-  const schema = model.schema as typeof model.schema & {
-    formPermissions?: PermissionMap;
-  };
+  const schema = model.schema;
 
   return schema.formPermissions;
 }
@@ -340,7 +339,12 @@ export class FormQueryService {
     };
   }
 
-  async findById(formName: string, id: string, include: unknown, userRole?: string) {
+  async findById(
+    formName: string,
+    id: string,
+    include: unknown,
+    userRole?: string,
+  ) {
     const model = this.registry.resolveModel(formName);
     const role = normalizeRole(userRole);
     const permissions = getModelPermissions(model);
@@ -372,13 +376,19 @@ export class FormQueryService {
     this.assertFormPermission(formName, permissions, 'write', role);
 
     const normalizedPayload: Payload = { ...payload };
-    this.assertWritablePayload(formName, normalizedPayload, permissions, 'write', role);
+    this.assertWritablePayload(
+      formName,
+      normalizedPayload,
+      permissions,
+      'write',
+      role,
+    );
 
     await this.resolveSubforms(model, normalizedPayload, false, role);
 
     const created = await model.create(normalizedPayload);
     const createdObj = created.toObject();
-    
+
     // Try to populate all relations in the response
     try {
       const query = model.findById(created._id);
@@ -391,7 +401,11 @@ export class FormQueryService {
       );
     } catch {
       // Fallback if populate fails (e.g., in tests with mocked models)
-      return this.filterReadableFields(transformIds(createdObj), permissions, role);
+      return this.filterReadableFields(
+        transformIds(createdObj),
+        permissions,
+        role,
+      );
     }
   }
 
@@ -414,7 +428,13 @@ export class FormQueryService {
     this.assertFormPermission(formName, permissions, 'edit', role);
 
     const normalizedPayload: Payload = toCreatePayload(payload);
-    this.assertWritablePayload(formName, normalizedPayload, permissions, 'edit', role);
+    this.assertWritablePayload(
+      formName,
+      normalizedPayload,
+      permissions,
+      'edit',
+      role,
+    );
     await this.resolveSubforms(model, normalizedPayload, true, role);
 
     const existing = await model.findById(parentId).lean().exec();
@@ -449,7 +469,11 @@ export class FormQueryService {
       );
     } catch {
       // Fallback if populate fails (e.g., in tests with mocked models)
-      return this.filterReadableFields(transformIds(updated), permissions, role);
+      return this.filterReadableFields(
+        transformIds(updated),
+        permissions,
+        role,
+      );
     }
   }
 
@@ -480,7 +504,7 @@ export class FormQueryService {
 
     const created = await subformModel.create(subformPayload);
     const createdObj = created.toObject();
-    
+
     // Try to populate all relations in the response
     try {
       const query = subformModel.findById(created._id);
@@ -511,7 +535,7 @@ export class FormQueryService {
 
     for (const relation of relations) {
       let value = payload[relation.path];
-      
+
       // Handle stringified values
       if (typeof value === 'string') {
         try {
@@ -583,7 +607,9 @@ export class FormQueryService {
     existing: Record<string, unknown>,
     payload: Payload,
   ) {
-    const relations = getRelationInfo(model).filter((relation) => relation.isArray);
+    const relations = getRelationInfo(model).filter(
+      (relation) => relation.isArray,
+    );
 
     for (const relation of relations) {
       const nextValue = payload[relation.path];
@@ -669,7 +695,9 @@ export class FormQueryService {
     role: string | undefined,
   ): unknown {
     if (Array.isArray(value)) {
-      return value.map((item) => this.filterReadableFields(item, permissions, role));
+      return value.map((item) =>
+        this.filterReadableFields(item, permissions, role),
+      );
     }
 
     if (!isPlainObject(value) || !permissions?.fields) {

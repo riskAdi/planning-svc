@@ -19,3 +19,24 @@ export class Education {
 }
 
 export const EducationSchema = SchemaFactory.createForClass(Education);
+
+import type { FormPermissions } from './permissions.types';
+
+export const EducationPermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse', 'patient'],
+    edit: ['nurse', 'patient'],
+    delete: ['nurse', 'patient'],
+  },
+  fields: {
+    title: ['nurse', 'patient'],
+    university: ['nurse', 'patient'],
+    year: ['nurse', 'patient'],
+    country: ['nurse', 'patient'],
+  },
+};
+
+(
+  EducationSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = EducationPermissions;

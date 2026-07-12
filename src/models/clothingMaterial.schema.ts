@@ -11,3 +11,15 @@ export class ClothingMaterial {
 
 export const ClothingMaterialSchema =
   SchemaFactory.createForClass(ClothingMaterial);
+
+import type { FormPermissions } from './permissions.types';
+
+export const ClothingMaterialPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  ClothingMaterialSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = ClothingMaterialPermissions;

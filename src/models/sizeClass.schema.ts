@@ -10,3 +10,15 @@ export class SizeClass {
 }
 
 export const SizeClassSchema = SchemaFactory.createForClass(SizeClass);
+
+import type { FormPermissions } from './permissions.types';
+
+export const SizeClassPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  SizeClassSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = SizeClassPermissions;

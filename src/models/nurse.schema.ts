@@ -4,20 +4,9 @@ import mongoose from 'mongoose';
 
 import { Patients } from './patients.schema';
 import { Hospitals } from './hospitals.schema';
+import type { FormPermissions } from './permissions.types';
 
 export type NurseDocument = HydratedDocument<Nurse>;
-
-export type RolePermissions = {
-  read?: string[];
-  write?: string[];
-  edit?: string[];
-  delete?: string[];
-};
-
-export type FormPermissions = {
-  form: RolePermissions;
-  fields: Record<string, RolePermissions>;
-};
 
 export const NursePermissions: FormPermissions = {
   form: {
@@ -100,5 +89,6 @@ export class Nurse {
 
 export const NurseSchema = SchemaFactory.createForClass(Nurse);
 
-(NurseSchema as typeof NurseSchema & { formPermissions?: FormPermissions }).formPermissions =
-  NursePermissions;
+(
+  NurseSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = NursePermissions;

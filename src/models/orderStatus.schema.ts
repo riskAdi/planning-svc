@@ -14,3 +14,18 @@ export class OrderStatus {
 }
 
 export const OrderStatusSchema = SchemaFactory.createForClass(OrderStatus);
+
+import type { FormPermissions } from './permissions.types';
+
+export const OrderStatusPermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse'],
+    edit: ['nurse'],
+    delete: ['nurse'],
+  },
+};
+
+(
+  OrderStatusSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = OrderStatusPermissions;

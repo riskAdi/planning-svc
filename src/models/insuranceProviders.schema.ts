@@ -11,3 +11,15 @@ export class InsuranceProviders {
 
 export const InsuranceProvidersSchema =
   SchemaFactory.createForClass(InsuranceProviders);
+
+import type { FormPermissions } from './permissions.types';
+
+export const InsuranceProvidersPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  InsuranceProvidersSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = InsuranceProvidersPermissions;

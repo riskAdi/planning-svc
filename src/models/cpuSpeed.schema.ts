@@ -10,3 +10,15 @@ export class CpuSpeed {
 }
 
 export const CpuSpeedSchema = SchemaFactory.createForClass(CpuSpeed);
+
+import type { FormPermissions } from './permissions.types';
+
+export const CpuSpeedPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  CpuSpeedSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = CpuSpeedPermissions;

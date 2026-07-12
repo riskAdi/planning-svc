@@ -10,3 +10,15 @@ export class SystemMemory {
 }
 
 export const SystemMemorySchema = SchemaFactory.createForClass(SystemMemory);
+
+import type { FormPermissions } from './permissions.types';
+
+export const SystemMemoryPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  SystemMemorySchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = SystemMemoryPermissions;
