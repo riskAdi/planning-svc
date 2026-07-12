@@ -4,7 +4,15 @@ import mongoose from 'mongoose';
 
 export type ProductsDocument = HydratedDocument<Products>;
 
-@Schema({ timestamps: true })
+type ProductImage = {
+  name?: string;
+  status?: string;
+  uid?: string;
+  url?: string;
+  [key: string]: unknown;
+};
+
+@Schema({ timestamps: true, strict: false })
 export class Products {
   @Prop({ required: false })
   name: string;
@@ -27,17 +35,32 @@ export class Products {
   @Prop({ required: false })
   saleLabel: string;
 
-  @Prop({ required: false })
-  category: number;
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubCategory',
+  })
+  category: mongoose.Types.ObjectId;
 
-  @Prop({ required: false })
-  mainImage: string;
+  @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
+  mainImage: ProductImage;
 
-  @Prop({ required: false })
-  hoverImage: string;
+  @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
+  hoverImage: ProductImage;
 
-  @Prop({ required: false })
-  search: string;
+  @Prop({
+    required: false,
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: 'ProductsModel',
+  })
+  products_model: mongoose.Types.ObjectId[];
+
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ProductSubscriptions',
+  })
+  productSubscriptions: mongoose.Types.ObjectId;
 }
 
 export const ProductsSchema = SchemaFactory.createForClass(Products);

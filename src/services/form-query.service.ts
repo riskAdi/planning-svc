@@ -1,8 +1,290 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Types, type Model, type SchemaType } from 'mongoose';
+
+import type { FormModelDefinition } from '../form-model.registry';
 
 import { FormModelRegistryService } from './form-model-registry.service';
 import { QueryBuilderService } from './query-builder.service';
 import { RelationResolverService } from './relation-resolver.service';
+
+type Payload = Record<string, unknown>;
+
+type RelationInfo = {
+  path: string;
+  refModelName: string;
+  isArray: boolean;
+};
+
+type PaginatedResult = {
+  data: unknown[];
+  meta: {
+    formName: string;
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    include: string[];
+  };
+};
+
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const PAYLOAD_SYSTEM_FIELDS = new Set(['id', '_id', 'subform', 'parent_id']);
+const READ_ALWAYS_ALLOWED_FIELDS = new Set([
+  'id',
+  '_id',
+  '__v',
+  'createdAt',
+  'updatedAt',
+]);
+
+type PermissionAction = 'read' | 'write' | 'edit' | 'delete';
+type AccessRule = NonNullable<FormModelDefinition['permissions']>['form'];
+type PermissionMap = NonNullable<FormModelDefinition['permissions']>;
+
+function transformIds(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => transformIds(item));
+  }
+
+  if (value instanceof Types.ObjectId) {
+    return value.toHexString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const source = value;
+  const target: Record<string, unknown> = {};
+
+  for (const [key, item] of Object.entries(source)) {
+    const nextKey = key === '_id' ? 'id' : key;
+    target[nextKey] = transformIds(item);
+  }
+
+  return target;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isObjectArray(value: unknown): value is Record<string, unknown>[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((item) => isPlainObject(item))
+  );
+}
+
+function toCreatePayload(input: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...input };
+  delete result.id;
+  delete result._id;
+  return result;
+}
+
+function getEntityId(input: Record<string, unknown>): string | Types.ObjectId | undefined {
+  const rawId = input.id ?? input._id;
+  if (typeof rawId === 'string' && rawId.trim() !== '') {
+    return rawId;
+  }
+
+  if (rawId instanceof Types.ObjectId) {
+    return rawId;
+  }
+
+  return undefined;
+}
+
+function getRelationInfo(model: Model<any>): RelationInfo[] {
+  const relations: RelationInfo[] = [];
+
+  model.schema.eachPath((pathName: string, schemaType: SchemaType) => {
+    const st = schemaType as unknown as {
+      options?: Record<string, unknown>;
+      caster?: { options?: Record<string, unknown> };
+      instance?: string;
+    };
+
+    const directRef = st.options?.ref;
+    if (typeof directRef === 'string' && directRef) {
+      relations.push({
+        path: pathName,
+        refModelName: directRef,
+        isArray: st.instance === 'Array',
+      });
+      return;
+    }
+
+    const arrayRef = st.caster?.options?.ref;
+    if (typeof arrayRef === 'string' && arrayRef) {
+      relations.push({
+        path: pathName,
+        refModelName: arrayRef,
+        isArray: true,
+      });
+    }
+  });
+
+  return relations;
+}
+
+function toSchemaMatchedFilter(
+  model: Model<any>,
+  rawFilter: Record<string, unknown>,
+): Record<string, unknown> {
+  const allowedPaths = new Set<string>();
+
+  const schemaPaths = model.schema.paths as Record<string, unknown> | undefined;
+  if (schemaPaths && typeof schemaPaths === 'object') {
+    Object.keys(schemaPaths).forEach((path) => allowedPaths.add(path));
+  }
+
+  if (
+    allowedPaths.size === 0 &&
+    typeof model.schema.eachPath === 'function'
+  ) {
+    model.schema.eachPath((pathName: string) => {
+      allowedPaths.add(pathName);
+    });
+  }
+
+  if (allowedPaths.size === 0) {
+    return rawFilter;
+  }
+
+  const matchedFilter: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(rawFilter)) {
+    const resolvedKey = key === 'id' ? '_id' : key;
+    if (!allowedPaths.has(resolvedKey)) {
+      continue;
+    }
+
+    matchedFilter[resolvedKey] = value;
+  }
+
+  return matchedFilter;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function toOrRegexFilter(
+  matchedFilter: Record<string, unknown>,
+): Record<string, unknown> {
+  const entries = Object.entries(matchedFilter);
+  if (entries.length === 0) {
+    return {};
+  }
+
+  const orClauses = entries.map(([key, value]) => {
+    if (typeof value === 'string') {
+      const wildcardPattern = value
+        .split('*')
+        .map((segment) => escapeRegex(segment))
+        .join('.*');
+
+      return {
+        [key]: {
+          $regex: wildcardPattern,
+          $options: 'i',
+        },
+      };
+    }
+
+    return { [key]: value };
+  });
+
+  return { $or: orClauses };
+}
+
+function toIdString(value: unknown): string | null {
+  if (value instanceof Types.ObjectId) {
+    return value.toHexString();
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value;
+  }
+
+  if (isPlainObject(value)) {
+    const nestedId = value.id ?? value._id;
+    if (nestedId instanceof Types.ObjectId) {
+      return nestedId.toHexString();
+    }
+    if (typeof nestedId === 'string' && nestedId.trim() !== '') {
+      return nestedId;
+    }
+  }
+
+  return null;
+}
+
+function normalizeRole(role: string | undefined): string | undefined {
+  const value = role?.trim().toLowerCase();
+  return value ? value : undefined;
+}
+
+function toAllowedRoles(
+  access: AccessRule,
+  action: PermissionAction,
+): string[] | undefined {
+  if (!access) {
+    return undefined;
+  }
+
+  if (Array.isArray(access)) {
+    return access.map((item) => item.toLowerCase());
+  }
+
+  const roles = access[action];
+  if (!roles) {
+    return undefined;
+  }
+
+  return roles.map((item) => item.toLowerCase());
+}
+
+function isRoleAllowed(
+  role: string | undefined,
+  allowedRoles: string[] | undefined,
+): boolean {
+  if (!allowedRoles) {
+    return true;
+  }
+
+  if (!role) {
+    return false;
+  }
+
+  return allowedRoles.includes(role);
+}
+
+function getModelPermissions(model: Model<any>): PermissionMap | undefined {
+  const schema = model.schema as typeof model.schema & {
+    formPermissions?: PermissionMap;
+  };
+
+  return schema.formPermissions;
+}
 
 @Injectable()
 export class FormQueryService {
@@ -12,13 +294,410 @@ export class FormQueryService {
     private readonly relations: RelationResolverService,
   ) {}
 
-  async find(formName: string, search: unknown, include: unknown) {
+  async find(
+    formName: string,
+    search: unknown,
+    include: unknown,
+    page = DEFAULT_PAGE,
+    limit = DEFAULT_LIMIT,
+    userRole?: string,
+  ): Promise<PaginatedResult> {
     const model = this.registry.resolveModel(formName);
-    const filter = this.queryBuilder.parseSearch(search);
+    const role = normalizeRole(userRole);
+    const permissions = getModelPermissions(model);
+    this.assertFormPermission(formName, permissions, 'read', role);
+
+    const parsedFilter = this.queryBuilder.parseSearch(search);
+    const matchedFilter = toSchemaMatchedFilter(model, parsedFilter);
+    const filter = toOrRegexFilter(matchedFilter);
+    const includes = this.relations.resolveIncludePaths(model, include);
+    const skip = (page - 1) * limit;
 
     const query = model.find(filter);
     this.relations.applyPopulate(query, model, include);
+    query.skip(skip).limit(limit);
 
-    return query.lean().exec();
+    const [data, total] = await Promise.all([
+      query.lean().exec(),
+      model.countDocuments(filter).exec(),
+    ]);
+
+    const transformedData = transformIds(data) as unknown[];
+    const filteredData = transformedData.map((item) =>
+      this.filterReadableFields(item, permissions, role),
+    );
+
+    return {
+      data: filteredData,
+      meta: {
+        formName,
+        page,
+        limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+        include: includes,
+      },
+    };
+  }
+
+  async findById(formName: string, id: string, include: unknown, userRole?: string) {
+    const model = this.registry.resolveModel(formName);
+    const role = normalizeRole(userRole);
+    const permissions = getModelPermissions(model);
+    this.assertFormPermission(formName, permissions, 'read', role);
+
+    const query = model.findById(id);
+    this.relations.applyPopulate(query, model, include);
+
+    const data = await query.lean().exec();
+
+    if (!data) {
+      throw new NotFoundException(
+        `No record found for formName "${formName}" and id "${id}".`,
+      );
+    }
+
+    return this.filterReadableFields(transformIds(data), permissions, role);
+  }
+
+  async create(formName: string, payload: Payload, userRole?: string) {
+    const parentId = getEntityId(payload);
+    if (parentId) {
+      return this.update(formName, payload, userRole);
+    }
+
+    const model = this.registry.resolveModel(formName);
+    const role = normalizeRole(userRole);
+    const permissions = getModelPermissions(model);
+    this.assertFormPermission(formName, permissions, 'write', role);
+
+    const normalizedPayload: Payload = { ...payload };
+    this.assertWritablePayload(formName, normalizedPayload, permissions, 'write', role);
+
+    await this.resolveSubforms(model, normalizedPayload, false, role);
+
+    const created = await model.create(normalizedPayload);
+    const createdObj = created.toObject();
+    
+    // Try to populate all relations in the response
+    try {
+      const query = model.findById(created._id);
+      this.relations.applyPopulate(query, model, undefined);
+      const populated = await query.lean().exec();
+      return this.filterReadableFields(
+        transformIds(populated || createdObj),
+        permissions,
+        role,
+      );
+    } catch {
+      // Fallback if populate fails (e.g., in tests with mocked models)
+      return this.filterReadableFields(transformIds(createdObj), permissions, role);
+    }
+  }
+
+  async update(formName: string, payload: Payload, userRole?: string) {
+    const parentId = getEntityId(payload);
+    const role = normalizeRole(userRole);
+
+    if (!parentId) {
+      throw new BadRequestException('id is required for update');
+    }
+
+    const subform = payload.subform;
+    if (typeof subform === 'string' && subform.trim() !== '') {
+      this.registry.resolveModel(formName);
+      return this.createSubformForParent(subform, payload, parentId, role);
+    }
+
+    const model = this.registry.resolveModel(formName);
+    const permissions = getModelPermissions(model);
+    this.assertFormPermission(formName, permissions, 'edit', role);
+
+    const normalizedPayload: Payload = toCreatePayload(payload);
+    this.assertWritablePayload(formName, normalizedPayload, permissions, 'edit', role);
+    await this.resolveSubforms(model, normalizedPayload, true, role);
+
+    const existing = await model.findById(parentId).lean().exec();
+    if (!existing) {
+      throw new NotFoundException(
+        `No record found for formName "${formName}" and id "${String(parentId)}".`,
+      );
+    }
+
+    this.mergeArrayRelationsWithExisting(model, existing, normalizedPayload);
+
+    const updated = await model
+      .findByIdAndUpdate(parentId, normalizedPayload, { new: true })
+      .lean()
+      .exec();
+
+    if (!updated) {
+      throw new NotFoundException(
+        `No record found for formName "${formName}" and id "${String(parentId)}".`,
+      );
+    }
+
+    // Try to populate all relations in the response
+    try {
+      const query = model.findById(parentId);
+      this.relations.applyPopulate(query, model, undefined);
+      const populated = await query.lean().exec();
+      return this.filterReadableFields(
+        transformIds(populated || updated),
+        permissions,
+        role,
+      );
+    } catch {
+      // Fallback if populate fails (e.g., in tests with mocked models)
+      return this.filterReadableFields(transformIds(updated), permissions, role);
+    }
+  }
+
+  private async createSubformForParent(
+    subformName: string,
+    payload: Payload,
+    parentId: string | Types.ObjectId,
+    role: string | undefined,
+  ) {
+    const subformModel = this.registry.resolveModel(subformName);
+    const subformPermissions = getModelPermissions(subformModel);
+    this.assertFormPermission(subformName, subformPermissions, 'write', role);
+
+    const subformPayload = toCreatePayload(payload);
+    delete subformPayload.subform;
+    subformPayload.parent_id =
+      typeof parentId === 'string' ? parentId : parentId.toHexString();
+
+    this.assertWritablePayload(
+      subformName,
+      subformPayload,
+      subformPermissions,
+      'write',
+      role,
+    );
+
+    await this.resolveSubforms(subformModel, subformPayload, true, role);
+
+    const created = await subformModel.create(subformPayload);
+    const createdObj = created.toObject();
+    
+    // Try to populate all relations in the response
+    try {
+      const query = subformModel.findById(created._id);
+      this.relations.applyPopulate(query, subformModel, undefined);
+      const populated = await query.lean().exec();
+      return this.filterReadableFields(
+        transformIds(populated || createdObj),
+        subformPermissions,
+        role,
+      );
+    } catch {
+      // Fallback if populate fails (e.g., in tests with mocked models)
+      return this.filterReadableFields(
+        transformIds(createdObj),
+        subformPermissions,
+        role,
+      );
+    }
+  }
+
+  private async resolveSubforms(
+    model: Model<any>,
+    payload: Payload,
+    allowUpdate: boolean,
+    role: string | undefined,
+  ) {
+    const relations = getRelationInfo(model);
+
+    for (const relation of relations) {
+      let value = payload[relation.path];
+      
+      // Handle stringified values
+      if (typeof value === 'string') {
+        try {
+          value = JSON.parse(value);
+        } catch {
+          // Not JSON, skip
+          continue;
+        }
+      }
+
+      if (!isPlainObject(value) && !isObjectArray(value)) {
+        continue;
+      }
+
+      const relationModel = this.registry.resolveModel(relation.refModelName);
+      const relationPermissions = getModelPermissions(relationModel);
+      const sourceItems = Array.isArray(value) ? value : [value];
+      const created = await Promise.all(
+        sourceItems.map(async (item) => {
+          const relationId = getEntityId(item);
+          const relationPayload = toCreatePayload(item);
+          const action: PermissionAction =
+            allowUpdate && relationId ? 'edit' : 'write';
+
+          this.assertFormPermission(
+            relation.refModelName,
+            relationPermissions,
+            action,
+            role,
+          );
+          this.assertWritablePayload(
+            relation.refModelName,
+            relationPayload,
+            relationPermissions,
+            action,
+            role,
+          );
+
+          await this.resolveSubforms(
+            relationModel,
+            relationPayload,
+            allowUpdate,
+            role,
+          );
+
+          if (allowUpdate && relationId) {
+            const updated = await relationModel
+              .findByIdAndUpdate(relationId, relationPayload, { new: true })
+              .exec();
+
+            if (updated) {
+              return updated;
+            }
+          }
+
+          return relationModel.create(relationPayload);
+        }),
+      );
+      const relationValue = relation.isArray
+        ? created.map((doc) => doc._id)
+        : created[0]?._id;
+
+      payload[relation.path] = relationValue;
+    }
+  }
+
+  private mergeArrayRelationsWithExisting(
+    model: Model<any>,
+    existing: Record<string, unknown>,
+    payload: Payload,
+  ) {
+    const relations = getRelationInfo(model).filter((relation) => relation.isArray);
+
+    for (const relation of relations) {
+      const nextValue = payload[relation.path];
+      if (!Array.isArray(nextValue) || nextValue.length === 0) {
+        continue;
+      }
+
+      const previousValue = existing[relation.path];
+      const previousArray = Array.isArray(previousValue) ? previousValue : [];
+
+      const merged: unknown[] = [];
+      const seen = new Set<string>();
+
+      for (const item of [...previousArray, ...nextValue]) {
+        const id = toIdString(item);
+        if (!id || seen.has(id)) {
+          continue;
+        }
+        seen.add(id);
+        merged.push(id);
+      }
+
+      payload[relation.path] = merged;
+    }
+  }
+
+  private assertFormPermission(
+    formName: string,
+    permissions: PermissionMap | undefined,
+    action: PermissionAction,
+    role: string | undefined,
+  ) {
+    const allowedRoles = toAllowedRoles(permissions?.form, action);
+
+    if (!isRoleAllowed(role, allowedRoles)) {
+      throw new ForbiddenException(
+        `Role "${role ?? 'unknown'}" is not authorized to ${action} form "${formName}".`,
+      );
+    }
+  }
+
+  private assertWritablePayload(
+    formName: string,
+    payload: Payload,
+    permissions: PermissionMap | undefined,
+    action: Extract<PermissionAction, 'write' | 'edit'>,
+    role: string | undefined,
+  ) {
+    if (!permissions?.fields) {
+      return;
+    }
+
+    const deniedFields: string[] = [];
+
+    for (const fieldName of Object.keys(payload)) {
+      if (PAYLOAD_SYSTEM_FIELDS.has(fieldName)) {
+        continue;
+      }
+
+      const fieldAccess = permissions.fields[fieldName];
+      if (!fieldAccess) {
+        continue;
+      }
+
+      const allowedRoles = toAllowedRoles(fieldAccess, action);
+      if (isRoleAllowed(role, allowedRoles)) {
+        continue;
+      }
+
+      deniedFields.push(fieldName);
+    }
+
+    if (deniedFields.length > 0) {
+      throw new ForbiddenException(
+        `Role "${role ?? 'unknown'}" is not authorized to ${action} fields on form "${formName}": ${deniedFields.join(', ')}.`,
+      );
+    }
+  }
+
+  private filterReadableFields(
+    value: unknown,
+    permissions: PermissionMap | undefined,
+    role: string | undefined,
+  ): unknown {
+    if (Array.isArray(value)) {
+      return value.map((item) => this.filterReadableFields(item, permissions, role));
+    }
+
+    if (!isPlainObject(value) || !permissions?.fields) {
+      return value;
+    }
+
+    const filtered: Record<string, unknown> = {};
+
+    for (const [fieldName, fieldValue] of Object.entries(value)) {
+      if (READ_ALWAYS_ALLOWED_FIELDS.has(fieldName)) {
+        filtered[fieldName] = fieldValue;
+        continue;
+      }
+
+      const fieldAccess = permissions.fields[fieldName];
+      if (!fieldAccess) {
+        filtered[fieldName] = fieldValue;
+        continue;
+      }
+
+      const allowedRoles = toAllowedRoles(fieldAccess, 'read');
+      if (!isRoleAllowed(role, allowedRoles)) {
+        continue;
+      }
+
+      filtered[fieldName] = fieldValue;
+    }
+
+    return filtered;
   }
 }

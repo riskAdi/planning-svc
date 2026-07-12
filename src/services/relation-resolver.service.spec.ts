@@ -41,7 +41,14 @@ describe('RelationResolverService', () => {
   it('applies populate calls for valid includes', () => {
     const query = { populate: jest.fn() } as any;
     svc.applyPopulate(query, model, 'customer,items');
-    expect(query.populate).toHaveBeenCalledWith('customer');
-    expect(query.populate).toHaveBeenCalledWith('items');
+    expect(query.populate).toHaveBeenCalledWith({ path: 'customer' });
+    expect(query.populate).toHaveBeenCalledWith({ path: 'items' });
+  });
+
+  it('defaults to all relations when include is omitted', () => {
+    const query = { populate: jest.fn() } as any;
+    svc.applyPopulate(query, model, undefined);
+    expect(query.populate).toHaveBeenCalledWith({ path: 'customer' });
+    expect(query.populate).toHaveBeenCalledWith({ path: 'items' });
   });
 });

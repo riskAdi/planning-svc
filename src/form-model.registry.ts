@@ -4,12 +4,25 @@ import * as modelExports from './models';
 
 export const FORM_MODEL_REGISTRY = Symbol('FORM_MODEL_REGISTRY');
 
+export type AccessPermissions =
+  | string[]
+  | {
+      read?: string[];
+      write?: string[];
+      edit?: string[];
+      delete?: string[];
+    };
+
 export interface FormModelDefinition {
   modelName: string;
   formNames: string[];
   model: Model<any>;
   searchableFields: string[];
   relations: string[];
+  permissions?: {
+    form?: AccessPermissions;
+    fields?: Record<string, AccessPermissions>;
+  };
 }
 
 export type FormModelRegistry = Record<string, FormModelDefinition>;
@@ -64,6 +77,16 @@ function getRelationPaths(schema: Schema): string[] {
     .map(([path]) => path);
 }
 
+function getPermissions(
+  schema: Schema,
+): FormModelDefinition['permissions'] | undefined {
+  const schemaWithPermissions = schema as Schema & {
+    formPermissions?: FormModelDefinition['permissions'];
+  };
+
+  return schemaWithPermissions.formPermissions;
+}
+
 function buildFormNames(modelName: string): string[] {
   return Array.from(
     new Set([
@@ -95,6 +118,7 @@ export function createFormModelRegistry(): FormModelRegistry {
         model,
         searchableFields: getSearchableFields(schema as Schema),
         relations: getRelationPaths(schema as Schema),
+        permissions: getPermissions(schema as Schema),
       };
 
       definition.formNames.forEach((formName) => {

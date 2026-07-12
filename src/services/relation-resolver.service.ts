@@ -2,6 +2,101 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { FormModelDefinition } from '../form-model.registry';
 import type { PopulateOptions, Query, Schema, SchemaType } from 'mongoose';
 
+const MAX_POPULATE_DEPTH = 3;
+
+function isSchemaLike(value: unknown): value is Schema {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as {
+    eachPath?: unknown;
+    path?: unknown;
+  };
+
+  return (
+    typeof candidate.eachPath === 'function' &&
+    typeof candidate.path === 'function'
+  );
+}
+
+function getRefModelName(schemaType: SchemaType): string | undefined {
+  const st = schemaType as unknown as {
+    options?: Record<string, unknown>;
+    caster?: {
+      options?: Record<string, unknown>;
+    };
+  };
+
+  const directRef = st.options?.ref;
+  if (typeof directRef === 'string' && directRef) {
+    return directRef;
+  }
+
+  const arrayRef = st.caster?.options?.ref;
+  if (typeof arrayRef === 'string' && arrayRef) {
+    return arrayRef;
+  }
+
+  const typeOption = st.options?.type;
+  if (Array.isArray(typeOption) && typeOption.length > 0) {
+    const first = typeOption[0] as { ref?: unknown };
+    if (typeof first?.ref === 'string' && first.ref) {
+      return first.ref;
+    }
+  }
+
+  return undefined;
+}
+
+function buildPopulateOption(
+  schema: Schema,
+  path: string,
+  getSchemaByModelName: (modelName: string) => Schema | null,
+  visitedModels = new Set<string>(),
+  depth = 1,
+): PopulateOptions {
+  const schemaType = schema.path(path);
+  if (!schemaType) {
+    return { path };
+  }
+
+  if (depth >= MAX_POPULATE_DEPTH) {
+    return { path };
+  }
+
+  const refModelName = getRefModelName(schemaType as SchemaType);
+  if (!refModelName || visitedModels.has(refModelName)) {
+    return { path };
+  }
+
+  const refSchema = getSchemaByModelName(refModelName) as unknown;
+  if (!isSchemaLike(refSchema)) {
+    return { path };
+  }
+
+  const nextVisited = new Set(visitedModels);
+  nextVisited.add(refModelName);
+
+  const nestedPaths = [...getSchemaRefPaths(refSchema)].sort();
+  if (nestedPaths.length === 0) {
+    return { path };
+  }
+
+  return {
+    path,
+    populate: nestedPaths.map((nestedPath) =>
+      buildPopulateOption(
+        refSchema,
+        nestedPath,
+        getSchemaByModelName,
+        nextVisited,
+        depth + 1,
+      ),
+    ),
+  };
+}
+
 function normalizeInclude(input: unknown): string[] {
   if (input === undefined || input === null) return [];
   if (typeof input !== 'string') {
@@ -77,16 +172,68 @@ function getSchemaRefPaths(schema: Schema): Set<string> {
 
 @Injectable()
 export class RelationResolverService {
+  private resolveSchemaFromModel(
+    model: unknown,
+    modelName: string,
+  ): Schema | null {
+    const modelWithDb = model as {
+      db?: {
+        model?: (name: string) => { schema?: unknown };
+      };
+    };
+
+    if (typeof modelWithDb?.db?.model !== 'function') {
+      return null;
+    }
+
+    try {
+      const refModel = modelWithDb.db.model(modelName);
+      const refSchema = refModel?.schema;
+      return isSchemaLike(refSchema) ? refSchema : null;
+    } catch {
+      return null;
+    }
+  }
+
+  resolveIncludePaths(
+    model: {
+      schema: Schema;
+    },
+    include: unknown,
+  ): string[] {
+    const requested = normalizeInclude(include);
+    const allowed = [...getSchemaRefPaths(model.schema)].sort();
+
+    if (requested.length === 0) {
+      return allowed;
+    }
+
+    this.validateIncludesOrThrow(model, requested);
+    return requested;
+  }
+
   resolveIncludes(
     definition: FormModelDefinition,
     include: unknown,
   ): PopulateOptions[] {
     const requested = normalizeInclude(include);
-    const allowed = new Set(definition.relations);
+    const allowed = requested.length === 0 ? definition.relations : requested;
+    const allowedSet = new Set(definition.relations);
+    const definitionSchema = definition.model.schema as unknown;
 
-    return requested
-      .filter((path) => allowed.has(path))
-      .map((path) => ({ path }));
+    if (!isSchemaLike(definitionSchema)) {
+      return allowed
+        .filter((path) => allowedSet.has(path))
+        .map((path) => ({ path }));
+    }
+
+    return allowed
+      .filter((path) => allowedSet.has(path))
+      .map((path) =>
+        buildPopulateOption(definitionSchema, path, (modelName) =>
+          this.resolveSchemaFromModel(definition.model, modelName),
+        ),
+      );
   }
 
   parseInclude(include: unknown): string[] {
@@ -118,10 +265,13 @@ export class RelationResolverService {
     },
     include: unknown,
   ): Query<T, unknown> {
-    const includes = normalizeInclude(include);
-    this.validateIncludesOrThrow(model, includes);
+    const includes = this.resolveIncludePaths(model, include);
     for (const path of includes) {
-      query.populate(path);
+      query.populate(
+        buildPopulateOption(model.schema, path, (modelName) =>
+          this.resolveSchemaFromModel(model, modelName),
+        ),
+      );
     }
     return query;
   }
