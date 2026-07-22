@@ -28,3 +28,22 @@ export class ProductsModel {
 }
 
 export const ProductsModelSchema = SchemaFactory.createForClass(ProductsModel);
+
+import type { FormPermissions } from './permissions.types';
+
+export const ProductsModelPermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse', 'patient'],
+    edit: ['nurse', 'patient'],
+    delete: ['nurse', 'patient'],
+  },
+  fields: {
+    colors: ['nurse', 'patient'],
+    images: ['nurse', 'patient'],
+  },
+};
+
+(
+  ProductsModelSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = ProductsModelPermissions;

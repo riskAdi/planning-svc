@@ -11,3 +11,15 @@ export class LaptopCondition {
 
 export const LaptopConditionSchema =
   SchemaFactory.createForClass(LaptopCondition);
+
+import type { FormPermissions } from './permissions.types';
+
+export const LaptopConditionPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  LaptopConditionSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = LaptopConditionPermissions;

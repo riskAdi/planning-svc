@@ -36,3 +36,24 @@ export class ProductSubscriptions {
 
 export const ProductSubscriptionsSchema =
   SchemaFactory.createForClass(ProductSubscriptions);
+
+import type { FormPermissions } from './permissions.types';
+
+export const ProductSubscriptionsPermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse', 'patient'],
+    edit: ['nurse', 'patient'],
+    delete: ['nurse', 'patient'],
+  },
+  fields: {
+    package_weight: ['nurse', 'patient'],
+    length: ['nurse', 'patient'],
+    width: ['nurse', 'patient'],
+    height: ['nurse', 'patient'],
+  },
+};
+
+(
+  ProductSubscriptionsSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = ProductSubscriptionsPermissions;

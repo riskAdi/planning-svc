@@ -11,3 +11,15 @@ export class CpuManufacturer {
 
 export const CpuManufacturerSchema =
   SchemaFactory.createForClass(CpuManufacturer);
+
+import type { FormPermissions } from './permissions.types';
+
+export const CpuManufacturerPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  CpuManufacturerSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = CpuManufacturerPermissions;

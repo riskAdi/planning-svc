@@ -10,3 +10,15 @@ export class ProcessorType {
 }
 
 export const ProcessorTypeSchema = SchemaFactory.createForClass(ProcessorType);
+
+import type { FormPermissions } from './permissions.types';
+
+export const ProcessorTypePermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  ProcessorTypeSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = ProcessorTypePermissions;

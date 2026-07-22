@@ -10,3 +10,15 @@ export class MensTrend {
 }
 
 export const MensTrendSchema = SchemaFactory.createForClass(MensTrend);
+
+import type { FormPermissions } from './permissions.types';
+
+export const MensTrendPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  MensTrendSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = MensTrendPermissions;

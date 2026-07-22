@@ -11,3 +11,15 @@ export class SubscriptionsPlan {
 
 export const SubscriptionsPlanSchema =
   SchemaFactory.createForClass(SubscriptionsPlan);
+
+import type { FormPermissions } from './permissions.types';
+
+export const SubscriptionsPlanPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  SubscriptionsPlanSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = SubscriptionsPlanPermissions;

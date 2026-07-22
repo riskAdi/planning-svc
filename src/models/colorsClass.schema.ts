@@ -10,3 +10,15 @@ export class ColorsClass {
 }
 
 export const ColorsClassSchema = SchemaFactory.createForClass(ColorsClass);
+
+import type { FormPermissions } from './permissions.types';
+
+export const ColorsClassPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  ColorsClassSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = ColorsClassPermissions;

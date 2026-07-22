@@ -10,3 +10,15 @@ export class GraphicMemory {
 }
 
 export const GraphicMemorySchema = SchemaFactory.createForClass(GraphicMemory);
+
+import type { FormPermissions } from './permissions.types';
+
+export const GraphicMemoryPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  GraphicMemorySchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = GraphicMemoryPermissions;

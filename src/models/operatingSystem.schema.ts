@@ -11,3 +11,15 @@ export class OperatingSystem {
 
 export const OperatingSystemSchema =
   SchemaFactory.createForClass(OperatingSystem);
+
+import type { FormPermissions } from './permissions.types';
+
+export const OperatingSystemPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  OperatingSystemSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = OperatingSystemPermissions;

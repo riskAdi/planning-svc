@@ -10,3 +10,15 @@ export class HardDisk {
 }
 
 export const HardDiskSchema = SchemaFactory.createForClass(HardDisk);
+
+import type { FormPermissions } from './permissions.types';
+
+export const HardDiskPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  HardDiskSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = HardDiskPermissions;

@@ -166,9 +166,7 @@ export class FormController {
     }
 
     const parsed =
-      typeof value === 'number'
-        ? value
-        : Number.parseInt(String(value), 10);
+      typeof value === 'number' ? value : Number.parseInt(String(value), 10);
 
     if (!Number.isInteger(parsed) || parsed <= 0) {
       throw new BadRequestException(`${fieldName} must be a positive integer`);

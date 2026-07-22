@@ -13,3 +13,16 @@ export class LengthClass {
 }
 
 export const LengthClassSchema = SchemaFactory.createForClass(LengthClass);
+
+import type { FormPermissions } from './permissions.types';
+
+export const LengthClassPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+    percentage: ['nurse', 'patient'],
+  },
+};
+
+(
+  LengthClassSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = LengthClassPermissions;

@@ -33,3 +33,18 @@ export class DiscountRule {
 }
 
 export const DiscountRuleSchema = SchemaFactory.createForClass(DiscountRule);
+
+import type { FormPermissions } from './permissions.types';
+
+export const DiscountRulePermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse'],
+    edit: ['nurse'],
+    delete: ['nurse'],
+  },
+};
+
+(
+  DiscountRuleSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = DiscountRulePermissions;

@@ -49,3 +49,21 @@ export class Doctors {
 }
 
 export const DoctorsSchema = SchemaFactory.createForClass(Doctors);
+
+import type { FormPermissions } from './permissions.types';
+
+export const DoctorsPermissions: FormPermissions = {
+  fields: {
+    first_name: ['nurse', 'patient'],
+    last_name: {
+      read: ['nurse', 'patient'],
+      write: ['nurse'],
+      edit: ['nurse'],
+      delete: ['nurse'],
+    },
+  },
+};
+
+(
+  DoctorsSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = DoctorsPermissions;

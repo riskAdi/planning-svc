@@ -10,3 +10,15 @@ export class CameraFront {
 }
 
 export const CameraFrontSchema = SchemaFactory.createForClass(CameraFront);
+
+import type { FormPermissions } from './permissions.types';
+
+export const CameraFrontPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  CameraFrontSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = CameraFrontPermissions;

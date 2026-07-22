@@ -45,3 +45,18 @@ export class Orders {
 }
 
 export const OrdersSchema = SchemaFactory.createForClass(Orders);
+
+import type { FormPermissions } from './permissions.types';
+
+export const OrdersPermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse'],
+    edit: ['nurse'],
+    delete: ['nurse'],
+  },
+};
+
+(
+  OrdersSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = OrdersPermissions;

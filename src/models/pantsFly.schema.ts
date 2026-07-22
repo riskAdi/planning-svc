@@ -10,3 +10,15 @@ export class PantsFly {
 }
 
 export const PantsFlySchema = SchemaFactory.createForClass(PantsFly);
+
+import type { FormPermissions } from './permissions.types';
+
+export const PantsFlyPermissions: FormPermissions = {
+  fields: {
+    name: ['nurse', 'patient'],
+  },
+};
+
+(
+  PantsFlySchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = PantsFlyPermissions;

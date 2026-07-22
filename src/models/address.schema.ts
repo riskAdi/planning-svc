@@ -19,3 +19,24 @@ export class Address {
 }
 
 export const AddressSchema = SchemaFactory.createForClass(Address);
+
+import type { FormPermissions } from './permissions.types';
+
+export const AddressPermissions: FormPermissions = {
+  form: {
+    read: ['nurse', 'patient'],
+    write: ['nurse'],
+    edit: ['nurse'],
+    delete: ['nurse'],
+  },
+  fields: {
+    name: ['nurse', 'patient'],
+    location: ['nurse', 'patient'],
+    phone_number: ['nurse', 'patient'],
+    country: ['nurse', 'patient'],
+  },
+};
+
+(
+  AddressSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = AddressPermissions;

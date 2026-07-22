@@ -31,3 +31,17 @@ export class ProductModelSize {
 
 export const ProductModelSizeSchema =
   SchemaFactory.createForClass(ProductModelSize);
+
+import type { FormPermissions } from './permissions.types';
+
+export const ProductModelSizePermissions: FormPermissions = {
+  fields: {
+    price: ['nurse', 'patient'],
+    specialPrice: ['nurse', 'patient'],
+    stock: ['nurse', 'patient'],
+  },
+};
+
+(
+  ProductModelSizeSchema as unknown as { formPermissions?: FormPermissions }
+).formPermissions = ProductModelSizePermissions;
