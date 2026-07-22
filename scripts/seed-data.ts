@@ -989,9 +989,148 @@ export const subCategoryData = [
     category: 'electronics',
     description: 'Portable computers and accessories',
     fields: {
-      processor: 'Intel/AMD',
-      ram: '8GB-64GB',
-      storage: 'SSD/HDD',
+      id: 1,
+      fields: {
+        battery_life: {
+          type: 'select',
+          source: 'batteryLife',
+          validationRules: { type: 'object' },
+          ui: {
+            label: 'Battery Life',
+            placeholder: 'Battery Life',
+            style: { width: '100%' },
+          },
+        },
+        camera_front: {
+          type: 'select',
+          source: 'cameraFront',
+          ui: {
+            label: 'Camera Front',
+            placeholder: 'Camera Front',
+            style: { width: '100%' },
+          },
+        },
+        laptop_condition: {
+          type: 'select',
+          source: 'laptopCondition',
+          ui: {
+            label: 'Laptop Condition',
+            placeholder: 'Laptop Condition',
+            style: { width: '100%' },
+          },
+        },
+        cpu_manufacturer: {
+          type: 'select',
+          source: 'cpuManufacturer',
+          ui: {
+            label: 'CPU Manufacturer',
+            placeholder: 'CPU Manufacturer',
+            style: { width: '100%' },
+          },
+        },
+        cpu_speed: {
+          type: 'select',
+          source: 'cpuSpeed',
+          ui: {
+            label: 'CPU Speed',
+            placeholder: 'CPU Speed',
+            style: { width: '100%' },
+          },
+        },
+        showHide: {
+          type: 'toggleFields',
+          fields: [
+            'graphic_card',
+            'graphic_memory',
+            'hard_disk',
+            'input_output_ports',
+            'operating_system',
+            'processor_type',
+            'system_memory',
+            'wireless_connectivity',
+          ],
+        },
+        graphic_card: {
+          type: 'select',
+          source: 'graphicCard',
+          offScreen: true,
+          ui: {
+            label: 'Graphic Card',
+            placeholder: 'Graphic Card',
+            style: { width: '100%' },
+          },
+        },
+        graphic_memory: {
+          type: 'select',
+          source: 'graphicMemory',
+          offScreen: true,
+          ui: {
+            label: 'Graphic Memory',
+            placeholder: 'Graphic Memory',
+            style: { width: '100%' },
+          },
+        },
+        hard_disk: {
+          type: 'select',
+          source: 'hardDisk',
+          offScreen: true,
+          ui: {
+            label: 'Hard Disk',
+            placeholder: 'Hard Disk',
+            style: { width: '100%' },
+          },
+        },
+        input_output_ports: {
+          type: 'select',
+          offScreen: true,
+          source: 'inputOutputPorts',
+          ui: {
+            label: 'Input/Output Ports',
+            placeholder: 'Input/Output Ports',
+            style: { width: '100%' },
+          },
+        },
+        operating_system: {
+          type: 'select',
+          offScreen: true,
+          source: 'operatingSystem',
+          ui: {
+            label: 'Operating System',
+            placeholder: 'Operating System',
+            style: { width: '100%' },
+          },
+        },
+        processor_type: {
+          type: 'select',
+          offScreen: true,
+          source: 'processorType',
+          ui: {
+            label: 'Processor Type',
+            placeholder: 'Processor Type',
+            style: { width: '100%' },
+          },
+        },
+        system_memory: {
+          type: 'select',
+          offScreen: true,
+          source: 'systemMemory',
+          ui: {
+            label: 'System Memory',
+            placeholder: 'System Memory',
+            style: { width: '100%' },
+          },
+        },
+        wireless_connectivity: {
+          type: 'select',
+          offScreen: true,
+          source: 'wirelessConnectivity',
+          ui: {
+            label: 'Wireless Connectivity',
+            placeholder: 'Wireless Connectivity',
+            style: { width: '100%' },
+          },
+        },
+      },
     },
   },
   {
@@ -999,10 +1138,149 @@ export const subCategoryData = [
     slug: 'smartphones',
     category: 'electronics',
     description: 'Mobile phones and accessories',
-    fields: {
-      processor: 'Snapdragon/Apple',
-      ram: '4GB-16GB',
-      storage: '64GB-1TB',
+     fields: {
+      id: 1,
+      fields: {
+        battery_life: {
+          type: 'select',
+          source: 'batteryLife',
+          validationRules: { type: 'object' },
+          ui: {
+            label: 'Battery Life',
+            placeholder: 'Battery Life',
+            style: { width: '100%' },
+          },
+        },
+        camera_front: {
+          type: 'select',
+          source: 'cameraFront',
+          ui: {
+            label: 'Camera Front',
+            placeholder: 'Camera Front',
+            style: { width: '100%' },
+          },
+        },
+        laptop_condition: {
+          type: 'select',
+          source: 'laptopCondition',
+          ui: {
+            label: 'Laptop Condition',
+            placeholder: 'Laptop Condition',
+            style: { width: '100%' },
+          },
+        },
+        cpu_manufacturer: {
+          type: 'select',
+          source: 'cpuManufacturer',
+          ui: {
+            label: 'CPU Manufacturer',
+            placeholder: 'CPU Manufacturer',
+            style: { width: '100%' },
+          },
+        },
+        cpu_speed: {
+          type: 'select',
+          source: 'cpuSpeed',
+          ui: {
+            label: 'CPU Speed',
+            placeholder: 'CPU Speed',
+            style: { width: '100%' },
+          },
+        },
+        showHide: {
+          type: 'toggleFields',
+          fields: [
+            'graphic_card',
+            'graphic_memory',
+            'hard_disk',
+            'input_output_ports',
+            'operating_system',
+            'processor_type',
+            'system_memory',
+            'wireless_connectivity',
+          ],
+        },
+        graphic_card: {
+          type: 'select',
+          source: 'graphicCard',
+          offScreen: true,
+          ui: {
+            label: 'Graphic Card',
+            placeholder: 'Graphic Card',
+            style: { width: '100%' },
+          },
+        },
+        graphic_memory: {
+          type: 'select',
+          source: 'graphicMemory',
+          offScreen: true,
+          ui: {
+            label: 'Graphic Memory',
+            placeholder: 'Graphic Memory',
+            style: { width: '100%' },
+          },
+        },
+        hard_disk: {
+          type: 'select',
+          source: 'hardDisk',
+          offScreen: true,
+          ui: {
+            label: 'Hard Disk',
+            placeholder: 'Hard Disk',
+            style: { width: '100%' },
+          },
+        },
+        input_output_ports: {
+          type: 'select',
+          offScreen: true,
+          source: 'inputOutputPorts',
+          ui: {
+            label: 'Input/Output Ports',
+            placeholder: 'Input/Output Ports',
+            style: { width: '100%' },
+          },
+        },
+        operating_system: {
+          type: 'select',
+          offScreen: true,
+          source: 'operatingSystem',
+          ui: {
+            label: 'Operating System',
+            placeholder: 'Operating System',
+            style: { width: '100%' },
+          },
+        },
+        processor_type: {
+          type: 'select',
+          offScreen: true,
+          source: 'processorType',
+          ui: {
+            label: 'Processor Type',
+            placeholder: 'Processor Type',
+            style: { width: '100%' },
+          },
+        },
+        system_memory: {
+          type: 'select',
+          offScreen: true,
+          source: 'systemMemory',
+          ui: {
+            label: 'System Memory',
+            placeholder: 'System Memory',
+            style: { width: '100%' },
+          },
+        },
+        wireless_connectivity: {
+          type: 'select',
+          offScreen: true,
+          source: 'wirelessConnectivity',
+          ui: {
+            label: 'Wireless Connectivity',
+            placeholder: 'Wireless Connectivity',
+            style: { width: '100%' },
+          },
+        },
+      },
     },
   },
   {
@@ -1010,10 +1288,76 @@ export const subCategoryData = [
     slug: 'mens-clothing',
     category: 'fashion',
     description: 'Clothing for men',
+    sizeSource: 'modelSize',
     fields: {
-      sizes: 'XS-XXL',
-      material: 'Cotton/Polyester',
-      style: 'Casual/Formal',
+      id: 2,
+      fields: {
+        ageRange: {
+          type: 'select',
+          source: 'ageRange',
+          ui: {
+            label: 'Age Range',
+            placeholder: 'Age Range',
+            style: { width: '100%' },
+            fieldNames: { label: 'text', value: 'id' },
+          },
+        },
+        apparel: {
+          type: 'select',
+          source: 'apparel',
+          ui: {
+            label: 'Apparel',
+            placeholder: 'Apparel',
+            style: { width: '100%' },
+          },
+        },
+        model: {
+          type: 'input',
+          validationRules: { type: 'string', min: 3, max: 255 },
+          ui: {
+            placeholder: 'Input Model',
+            label: 'Model',
+            style: { width: '100%' },
+          },
+          access: ['nurse', 'patient'],
+        },
+        clothing_style: {
+          type: 'select',
+          source: 'clothingStyle',
+          ui: {
+            label: 'Clothing Style',
+            placeholder: 'Clothing Style',
+            style: { width: '100%' },
+          },
+        },
+        clothing_material: {
+          type: 'select',
+          source: 'clothingMaterial',
+          ui: {
+            label: 'Clothing Material',
+            placeholder: 'Clothing Material',
+            style: { width: '100%' },
+          },
+        },
+        mens_trend: {
+          type: 'select',
+          source: 'mensTrend',
+          ui: {
+            label: 'Mens Trend',
+            placeholder: 'Mens Trend',
+            style: { width: '100%' },
+          },
+        },
+        pants_fly: {
+          type: 'select',
+          source: 'pantsFly',
+          ui: {
+            label: 'Pants Fly',
+            placeholder: 'Pants Fly',
+            style: { width: '100%' },
+          },
+        },
+      },
     },
   },
   {
@@ -1021,10 +1365,76 @@ export const subCategoryData = [
     slug: 'womens-clothing',
     category: 'fashion',
     description: 'Clothing for women',
+    sizeSource: 'modelSize',
     fields: {
-      sizes: 'XS-XXL',
-      material: 'Cotton/Silk',
-      style: 'Casual/Formal',
+      id: 2,
+      fields: {
+        ageRange: {
+          type: 'select',
+          source: 'ageRange',
+          ui: {
+            label: 'Age Range',
+            placeholder: 'Age Range',
+            style: { width: '100%' },
+            fieldNames: { label: 'text', value: 'id' },
+          },
+        },
+        apparel: {
+          type: 'select',
+          source: 'apparel',
+          ui: {
+            label: 'Apparel',
+            placeholder: 'Apparel',
+            style: { width: '100%' },
+          },
+        },
+        model: {
+          type: 'input',
+          validationRules: { type: 'string', min: 3, max: 255 },
+          ui: {
+            placeholder: 'Input Model',
+            label: 'Model',
+            style: { width: '100%' },
+          },
+          access: ['nurse', 'patient'],
+        },
+        clothing_style: {
+          type: 'select',
+          source: 'clothingStyle',
+          ui: {
+            label: 'Clothing Style',
+            placeholder: 'Clothing Style',
+            style: { width: '100%' },
+          },
+        },
+        clothing_material: {
+          type: 'select',
+          source: 'clothingMaterial',
+          ui: {
+            label: 'Clothing Material',
+            placeholder: 'Clothing Material',
+            style: { width: '100%' },
+          },
+        },
+        mens_trend: {
+          type: 'select',
+          source: 'mensTrend',
+          ui: {
+            label: 'Mens Trend',
+            placeholder: 'Mens Trend',
+            style: { width: '100%' },
+          },
+        },
+        pants_fly: {
+          type: 'select',
+          source: 'pantsFly',
+          ui: {
+            label: 'Pants Fly',
+            placeholder: 'Pants Fly',
+            style: { width: '100%' },
+          },
+        },
+      },
     },
   },
   {
