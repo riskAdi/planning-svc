@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Types, type Model, type SchemaType } from 'mongoose';
+import { isDeepStrictEqual } from 'node:util';
+import { Types, type Model, type Schema, type SchemaType } from 'mongoose';
 
 import type { FormModelDefinition } from '../form-model.registry';
 
@@ -34,7 +35,13 @@ type PaginatedResult = {
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
-const PAYLOAD_SYSTEM_FIELDS = new Set(['id', '_id', 'subform', 'parent_id']);
+const PAYLOAD_SYSTEM_FIELDS = new Set([
+  'id',
+  '_id',
+  'subform',
+  'parent_id',
+  'audit',
+]);
 const READ_ALWAYS_ALLOWED_FIELDS = new Set([
   'id',
   '_id',
@@ -42,10 +49,29 @@ const READ_ALWAYS_ALLOWED_FIELDS = new Set([
   'createdAt',
   'updatedAt',
 ]);
+const AUDIT_IGNORED_FIELDS = new Set([
+  'id',
+  '_id',
+  '__v',
+  'createdAt',
+  'updatedAt',
+  'subform',
+  'parent_id',
+  'audit',
+]);
 
 type PermissionAction = 'read' | 'write' | 'edit' | 'delete';
 type AccessRule = NonNullable<FormModelDefinition['permissions']>['form'];
 type PermissionMap = NonNullable<FormModelDefinition['permissions']>;
+
+type SchemaWithPermissions = Schema & {
+  formPermissions?: PermissionMap;
+};
+
+type CreatableDocument = {
+  _id?: string | Types.ObjectId;
+  toObject: () => Record<string, unknown>;
+};
 
 function transformIds(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -80,8 +106,41 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
     return false;
   }
 
-  const prototype = Object.getPrototypeOf(value);
+  const prototype = Object.getPrototypeOf(value) as object | null;
   return prototype === Object.prototype || prototype === null;
+}
+
+function getModelSchema(model: Model<any>): Schema {
+  const schema = model.schema as Schema;
+  return schema;
+}
+
+function getObjectIdLike(value: unknown): string | Types.ObjectId | null {
+  if (value instanceof Types.ObjectId) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const rawId =
+    (Reflect.get(value, '_id') as unknown) ??
+    (Reflect.get(value, 'id') as unknown);
+
+  if (rawId instanceof Types.ObjectId) {
+    return rawId;
+  }
+
+  if (typeof rawId === 'string' && rawId.trim() !== '') {
+    return rawId;
+  }
+
+  return null;
 }
 
 function isObjectArray(value: unknown): value is Record<string, unknown>[] {
@@ -98,6 +157,7 @@ function toCreatePayload(
   const result = { ...input };
   delete result.id;
   delete result._id;
+  delete result.audit;
   return result;
 }
 
@@ -118,8 +178,9 @@ function getEntityId(
 
 function getRelationInfo(model: Model<any>): RelationInfo[] {
   const relations: RelationInfo[] = [];
+  const schema = getModelSchema(model);
 
-  model.schema.eachPath((pathName: string, schemaType: SchemaType) => {
+  schema.eachPath((pathName: string, schemaType: SchemaType) => {
     const st = schemaType as unknown as {
       options?: Record<string, unknown>;
       caster?: { options?: Record<string, unknown> };
@@ -154,14 +215,15 @@ function toSchemaMatchedFilter(
   rawFilter: Record<string, unknown>,
 ): Record<string, unknown> {
   const allowedPaths = new Set<string>();
+  const schema = getModelSchema(model);
 
-  const schemaPaths = model.schema.paths as Record<string, unknown> | undefined;
+  const schemaPaths = schema.paths as Record<string, unknown> | undefined;
   if (schemaPaths && typeof schemaPaths === 'object') {
     Object.keys(schemaPaths).forEach((path) => allowedPaths.add(path));
   }
 
-  if (allowedPaths.size === 0 && typeof model.schema.eachPath === 'function') {
-    model.schema.eachPath((pathName: string) => {
+  if (allowedPaths.size === 0 && typeof schema.eachPath === 'function') {
+    schema.eachPath((pathName: string) => {
       allowedPaths.add(pathName);
     });
   }
@@ -280,9 +342,81 @@ function isRoleAllowed(
 }
 
 function getModelPermissions(model: Model<any>): PermissionMap | undefined {
-  const schema = model.schema;
+  const schema = getModelSchema(model) as SchemaWithPermissions;
 
   return schema.formPermissions;
+}
+
+type AuditChange = {
+  path: string;
+  from?: unknown;
+  to?: unknown;
+};
+
+function normalizeAuditValue(value: unknown): unknown {
+  if (value instanceof Types.ObjectId) {
+    return value.toHexString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeAuditValue(item));
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
+  }
+
+  const normalized: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    normalized[key] = normalizeAuditValue(item);
+  }
+
+  return normalized;
+}
+
+function isDiffableObject(value: unknown): value is Record<string, unknown> {
+  return isPlainObject(value) && !(value instanceof Date);
+}
+
+function diffChangedFields(
+  previous: Record<string, unknown> | undefined,
+  next: Record<string, unknown>,
+  basePath = '',
+): AuditChange[] {
+  const changes: AuditChange[] = [];
+
+  for (const [key, nextValue] of Object.entries(next)) {
+    if (AUDIT_IGNORED_FIELDS.has(key)) {
+      continue;
+    }
+
+    const path = basePath ? `${basePath}.${key}` : key;
+    const previousValue = previous?.[key];
+
+    if (isDiffableObject(previousValue) && isDiffableObject(nextValue)) {
+      changes.push(...diffChangedFields(previousValue, nextValue, path));
+      continue;
+    }
+
+    const normalizedPrevious = normalizeAuditValue(previousValue);
+    const normalizedNext = normalizeAuditValue(nextValue);
+
+    if (isDeepStrictEqual(normalizedPrevious, normalizedNext)) {
+      continue;
+    }
+
+    changes.push({
+      path,
+      from: normalizedPrevious,
+      to: normalizedNext,
+    });
+  }
+
+  return changes;
 }
 
 @Injectable()
@@ -353,7 +487,7 @@ export class FormQueryService {
     const query = model.findById(id);
     this.relations.applyPopulate(query, model, include);
 
-    const data = await query.lean().exec();
+    const data = (await query.lean().exec()) as unknown;
 
     if (!data) {
       throw new NotFoundException(
@@ -386,14 +520,21 @@ export class FormQueryService {
 
     await this.resolveSubforms(model, normalizedPayload, false, role);
 
-    const created = await model.create(normalizedPayload);
+    const created = (await model.create(
+      normalizedPayload,
+    )) as CreatableDocument;
     const createdObj = created.toObject();
+    const createdId = getObjectIdLike(created._id ?? createdObj._id);
 
     // Try to populate all relations in the response
     try {
-      const query = model.findById(created._id);
+      if (!createdId) {
+        throw new Error('Unable to resolve created document id');
+      }
+
+      const query = model.findById(createdId);
       this.relations.applyPopulate(query, model, undefined);
-      const populated = await query.lean().exec();
+      const populated = (await query.lean().exec()) as unknown;
       return this.filterReadableFields(
         transformIds(populated || createdObj),
         permissions,
@@ -437,7 +578,10 @@ export class FormQueryService {
     );
     await this.resolveSubforms(model, normalizedPayload, true, role);
 
-    const existing = await model.findById(parentId).lean().exec();
+    const existing = (await model.findById(parentId).lean().exec()) as Record<
+      string,
+      unknown
+    > | null;
     if (!existing) {
       throw new NotFoundException(
         `No record found for formName "${formName}" and id "${String(parentId)}".`,
@@ -446,10 +590,35 @@ export class FormQueryService {
 
     this.mergeArrayRelationsWithExisting(model, existing, normalizedPayload);
 
-    const updated = await model
-      .findByIdAndUpdate(parentId, normalizedPayload, { new: true })
+    const changedFields = diffChangedFields(existing, normalizedPayload);
+    const hasAuditKey = Reflect.has(existing, 'audit');
+
+    const setPayload: Record<string, unknown> = {
+      ...normalizedPayload,
+    };
+
+    if (!hasAuditKey && changedFields.length === 0) {
+      setPayload.audit = [];
+    }
+
+    const updatePayload: Record<string, unknown> = {
+      $set: setPayload,
+    };
+
+    if (changedFields.length > 0) {
+      updatePayload.$push = {
+        audit: {
+          changedAt: new Date(),
+          actorRole: role,
+          changedFields,
+        },
+      };
+    }
+
+    const updated = (await model
+      .findByIdAndUpdate(parentId, updatePayload, { new: true })
       .lean()
-      .exec();
+      .exec()) as unknown;
 
     if (!updated) {
       throw new NotFoundException(
@@ -461,7 +630,7 @@ export class FormQueryService {
     try {
       const query = model.findById(parentId);
       this.relations.applyPopulate(query, model, undefined);
-      const populated = await query.lean().exec();
+      const populated = (await query.lean().exec()) as unknown;
       return this.filterReadableFields(
         transformIds(populated || updated),
         permissions,
@@ -502,14 +671,21 @@ export class FormQueryService {
 
     await this.resolveSubforms(subformModel, subformPayload, true, role);
 
-    const created = await subformModel.create(subformPayload);
+    const created = (await subformModel.create(
+      subformPayload,
+    )) as CreatableDocument;
     const createdObj = created.toObject();
+    const createdId = getObjectIdLike(created._id ?? createdObj._id);
 
     // Try to populate all relations in the response
     try {
-      const query = subformModel.findById(created._id);
+      if (!createdId) {
+        throw new Error('Unable to resolve created subform id');
+      }
+
+      const query = subformModel.findById(createdId);
       this.relations.applyPopulate(query, subformModel, undefined);
-      const populated = await query.lean().exec();
+      const populated = (await query.lean().exec()) as unknown;
       return this.filterReadableFields(
         transformIds(populated || createdObj),
         subformPermissions,
@@ -553,50 +729,65 @@ export class FormQueryService {
       const relationModel = this.registry.resolveModel(relation.refModelName);
       const relationPermissions = getModelPermissions(relationModel);
       const sourceItems = Array.isArray(value) ? value : [value];
-      const created = await Promise.all(
-        sourceItems.map(async (item) => {
-          const relationId = getEntityId(item);
-          const relationPayload = toCreatePayload(item);
-          const action: PermissionAction =
-            allowUpdate && relationId ? 'edit' : 'write';
+      const createdIds = await Promise.all(
+        sourceItems.map(
+          async (item): Promise<string | Types.ObjectId | null> => {
+            const relationId = getEntityId(item);
+            const relationPayload = toCreatePayload(item);
+            const action: PermissionAction =
+              allowUpdate && relationId ? 'edit' : 'write';
 
-          this.assertFormPermission(
-            relation.refModelName,
-            relationPermissions,
-            action,
-            role,
-          );
-          this.assertWritablePayload(
-            relation.refModelName,
-            relationPayload,
-            relationPermissions,
-            action,
-            role,
-          );
+            this.assertFormPermission(
+              relation.refModelName,
+              relationPermissions,
+              action,
+              role,
+            );
+            this.assertWritablePayload(
+              relation.refModelName,
+              relationPayload,
+              relationPermissions,
+              action,
+              role,
+            );
 
-          await this.resolveSubforms(
-            relationModel,
-            relationPayload,
-            allowUpdate,
-            role,
-          );
+            await this.resolveSubforms(
+              relationModel,
+              relationPayload,
+              allowUpdate,
+              role,
+            );
 
-          if (allowUpdate && relationId) {
-            const updated = await relationModel
-              .findByIdAndUpdate(relationId, relationPayload, { new: true })
-              .exec();
+            if (allowUpdate && relationId) {
+              const updated = (await relationModel
+                .findByIdAndUpdate(relationId, relationPayload, { new: true })
+                .exec()) as unknown;
 
-            if (updated) {
-              return updated;
+              const updatedId = getObjectIdLike(updated);
+              if (updatedId) {
+                return updatedId;
+              }
             }
-          }
 
-          return relationModel.create(relationPayload);
-        }),
+            const created = (await relationModel.create(
+              relationPayload,
+            )) as CreatableDocument;
+
+            return (
+              getObjectIdLike(created._id) ??
+              getObjectIdLike(created.toObject())
+            );
+          },
+        ),
       );
+
+      const validCreatedIds = createdIds.filter(
+        (id): id is string | Types.ObjectId => id !== null,
+      );
+
       const relationValue = relation.isArray
-        ? created.map((doc) => doc._id)
-        : created[0]?._id;
+        ? validCreatedIds
+        : validCreatedIds[0];
 
       payload[relation.path] = relationValue;
     }
@@ -618,12 +809,15 @@ export class FormQueryService {
       }
 
       const previousValue = existing[relation.path];
-      const previousArray = Array.isArray(previousValue) ? previousValue : [];
+      const previousArray: unknown[] = Array.isArray(previousValue)
+        ? previousValue
+        : [];
+      const nextArray: unknown[] = nextValue;
 
       const merged: unknown[] = [];
       const seen = new Set<string>();
 
-      for (const item of [...previousArray, ...nextValue]) {
+      for (const item of [...previousArray, ...nextArray]) {
         const id = toIdString(item);
         if (!id || seen.has(id)) {
           continue;

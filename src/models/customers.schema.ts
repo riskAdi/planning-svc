@@ -1,26 +1,27 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { HydratedDocument } from 'mongoose';
-import { Address } from './address.schema';
-import { Education } from './education.schema';
 
 export type CustomersDocument = HydratedDocument<Customers>;
 
 @Schema({ timestamps: true })
 export class Customers {
   @Prop({ required: false })
-  first_name: string;
+  firstName: string;
 
   @Prop({ required: false })
-  last_name: string;
+  lastName: string;
 
   @Prop({ required: false })
-  phone_number: string;
+  phoneNumber: string;
 
   @Prop({ required: false })
   email: string;
 
   @Prop({ required: false })
-  location: string;
+  address: string;
+
+  @Prop({ required: false })
+  city: string;
 
   @Prop({ required: false })
   gender: string;
@@ -45,20 +46,6 @@ export class Customers {
 
   @Prop({ required: false })
   pickupStatus: string;
-
-  @Prop({
-    required: false,
-    type: mongoose.Schema.Types.ObjectId,
-    ref: Address.name,
-  })
-  address: mongoose.Types.ObjectId | Address;
-
-  @Prop({
-    required: false,
-    type: [mongoose.Schema.Types.ObjectId],
-    ref: Education.name,
-  })
-  education: Array<mongoose.Types.ObjectId | Education>;
 }
 
 export const CustomersSchema = SchemaFactory.createForClass(Customers);
@@ -67,14 +54,14 @@ import type { FormPermissions } from './permissions.types';
 
 export const CustomersPermissions: FormPermissions = {
   fields: {
-    first_name: ['nurse', 'patient'],
-    last_name: {
+    firstName: ['nurse', 'patient'],
+    lastName: {
       read: ['nurse', 'patient'],
       write: ['nurse'],
       edit: ['nurse'],
       delete: ['nurse'],
     },
-    phone_number: ['nurse', 'patient'],
+    phoneNumber: ['nurse', 'patient'],
   },
 };
 

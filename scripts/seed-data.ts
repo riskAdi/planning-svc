@@ -1519,3 +1519,28 @@ export const ruleLookupData = [
     slug: 'min_cart_total',
   },
 ];
+
+// Order status dataset
+export const orderStatusData = [
+  {
+    name: 'Pending',
+  },
+  {
+    name: 'Processing',
+  },
+  {
+    name: 'Shipped',
+  },
+  {
+    name: 'Delivered',
+  },
+  {
+    name: 'Cancelled',
+  },
+  {
+    name: 'Done',
+  },
+  {
+    name: 'Disputed',
+  },
+];
