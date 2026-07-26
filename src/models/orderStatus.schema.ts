@@ -7,7 +7,7 @@ export type OrderStatusDocument = HydratedDocument<OrderStatus>;
 @Schema({ timestamps: true })
 export class OrderStatus {
   @Prop({ required: false })
-  status: string;
+  name: string;
 
   @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
   message: any;

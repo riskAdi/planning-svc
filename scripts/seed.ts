@@ -18,6 +18,7 @@ import { SeasonSchema } from '../src/models/season.schema';
 import { SystemMemorySchema } from '../src/models/systemMemory.schema';
 import { WirelessConnectivitySchema } from '../src/models/wirelessConnectivity.schema';
 import { ColorsClassSchema } from '../src/models/colorsClass.schema';
+import { OrderStatusSchema } from '../src/models/orderStatus.schema';
 import { ScopeLookupSchema } from '../src/models/ScopeLookup.schema';
 import { RuleLookupSchema } from '../src/models/ruleLookup.schema';
 import {
@@ -40,6 +41,7 @@ import {
   categoryData,
   subCategoryData,
   colorsClassData,
+  orderStatusData,
   scopeLookupData,
   ruleLookupData,
 } from './seed-data';
@@ -93,6 +95,7 @@ async function seedDatabase() {
     const CategoryModel = mongoose.model('Category', CategorySchema);
     const SubCategoryModel = mongoose.model('SubCategory', SubCategorySchema);
     const ColorsClassModel = mongoose.model('ColorsClass', ColorsClassSchema);
+    const OrderStatusModel = mongoose.model('OrderStatus', OrderStatusSchema);
     const ScopeLookupModel = mongoose.model(
       'ScopeLookup',
       ScopeLookupSchema as mongoose.Schema,
@@ -336,6 +339,17 @@ async function seedDatabase() {
       ),
     );
     console.log(`✓ ColorsClass seeded (${colorsClassResults.length} records)`);
+
+    console.log('🌱 Seeding OrderStatus...');
+    const orderStatusResults = await Promise.all(
+      orderStatusData.map((data) =>
+        OrderStatusModel.findOneAndUpdate({ name: data.name }, data, {
+          upsert: true,
+          returnDocument: 'after',
+        }),
+      ),
+    );
+    console.log(`✓ OrderStatus seeded (${orderStatusResults.length} records)`);
 
     console.log('🌱 Seeding ScopeLookup...');
     const scopeLookupResults = await Promise.all(
