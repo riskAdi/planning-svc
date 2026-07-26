@@ -165,8 +165,14 @@ export class FormController {
       return undefined;
     }
 
-    const parsed =
-      typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+    let parsed: number;
+    if (typeof value === 'number') {
+      parsed = value;
+    } else if (typeof value === 'string') {
+      parsed = Number.parseInt(value, 10);
+    } else {
+      throw new BadRequestException(`${fieldName} must be a positive integer`);
+    }
 
     if (!Number.isInteger(parsed) || parsed <= 0) {
       throw new BadRequestException(`${fieldName} must be a positive integer`);
