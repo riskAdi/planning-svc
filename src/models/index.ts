@@ -32,6 +32,7 @@ export * from './operatingSystem.schema';
 export * from './orderProducts.schema';
 export * from './orders.schema';
 export * from './orderStatus.schema';
+export * from './orderStatusHistory.schema';
 export * from './pantsFly.schema';
 export * from './patients.schema';
 export * from './processorType.schema';

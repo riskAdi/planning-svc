@@ -58,5 +58,15 @@ export const OrdersPermissions: FormPermissions = {
 };
 
 (
-  OrdersSchema as unknown as { formPermissions?: FormPermissions }
+  OrdersSchema as unknown as {
+    formPermissions?: FormPermissions;
+    excludeAttributes?: string[];
+  }
 ).formPermissions = OrdersPermissions;
+
+(
+  OrdersSchema as unknown as {
+    formPermissions?: FormPermissions;
+    excludeAttributes?: string[];
+  }
+).excludeAttributes = ['orderProducts', 'audit'];

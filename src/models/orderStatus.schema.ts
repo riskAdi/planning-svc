@@ -9,6 +9,9 @@ export class OrderStatus {
   @Prop({ required: false })
   name: string;
 
+  @Prop({ required: false, trim: true, lowercase: true })
+  slug: string;
+
   @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
   message: any;
 }

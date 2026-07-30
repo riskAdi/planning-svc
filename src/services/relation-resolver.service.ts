@@ -4,6 +4,28 @@ import type { PopulateOptions, Query, Schema, SchemaType } from 'mongoose';
 
 const MAX_POPULATE_DEPTH = 3;
 
+type SchemaWithExcludeAttributes = Schema & {
+  excludeAttributes?: string[];
+};
+
+function getExcludeAttributes(
+  schema: SchemaWithExcludeAttributes,
+): Set<string> {
+  const excludeAttributes = schema.excludeAttributes;
+  if (!Array.isArray(excludeAttributes) || excludeAttributes.length === 0) {
+    return new Set<string>();
+  }
+
+  const normalized = excludeAttributes
+    .filter(
+      (fieldName): fieldName is string =>
+        typeof fieldName === 'string' && fieldName.trim() !== '',
+    )
+    .map((fieldName) => fieldName.trim());
+
+  return new Set(normalized);
+}
+
 function isSchemaLike(value: unknown): value is Schema {
   if (!value || typeof value !== 'object') {
     return false;
@@ -75,15 +97,29 @@ function buildPopulateOption(
     return { path };
   }
 
+  const excludeAttributes = getExcludeAttributes(
+    refSchema as SchemaWithExcludeAttributes,
+  );
+  const select = getExcludeSelect(excludeAttributes);
+
   const nextVisited = new Set(visitedModels);
   nextVisited.add(refModelName);
 
-  const nestedPaths = [...getSchemaRefPaths(refSchema)].sort();
+  const nestedPaths = [...getSchemaRefPaths(refSchema)]
+    .filter((nestedPath) => !excludeAttributes.has(nestedPath))
+    .sort();
   if (nestedPaths.length === 0) {
-    return { path };
+    if (!select) {
+      return { path };
+    }
+
+    return {
+      path,
+      select,
+    };
   }
 
-  return {
+  const option: PopulateOptions = {
     path,
     populate: nestedPaths.map((nestedPath) =>
       buildPopulateOption(
@@ -95,6 +131,26 @@ function buildPopulateOption(
       ),
     ),
   };
+
+  if (select) {
+    option.select = select;
+  }
+
+  return option;
+}
+
+function getExcludeSelect(excludeAttributes: Set<string>): string | undefined {
+  if (excludeAttributes.size === 0) {
+    return undefined;
+  }
+
+  const normalized = [...excludeAttributes];
+
+  if (normalized.length === 0) {
+    return undefined;
+  }
+
+  return normalized.map((fieldName) => `-${fieldName}`).join(' ');
 }
 
 function normalizeInclude(input: unknown): string[] {

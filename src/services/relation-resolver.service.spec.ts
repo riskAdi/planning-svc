@@ -51,4 +51,40 @@ describe('RelationResolverService', () => {
     expect(query.populate).toHaveBeenCalledWith({ path: 'customer' });
     expect(query.populate).toHaveBeenCalledWith({ path: 'items' });
   });
+
+  it('applies excludeAttributes from referenced schema', () => {
+    const customersSchema = new mongoose.Schema({
+      name: String,
+      orderProducts: [
+        { type: mongoose.Schema.Types.ObjectId, ref: 'OrderProducts' },
+      ],
+    });
+
+    (
+      customersSchema as unknown as {
+        excludeAttributes?: string[];
+      }
+    ).excludeAttributes = ['orderProducts', 'products'];
+
+    const modelWithDb = {
+      schema,
+      db: {
+        model: jest.fn().mockImplementation((modelName: string) => {
+          if (modelName === 'Customers') {
+            return { schema: customersSchema };
+          }
+
+          return { schema: new mongoose.Schema({}) };
+        }),
+      },
+    } as any;
+
+    const query = { populate: jest.fn() } as any;
+    svc.applyPopulate(query, modelWithDb, 'customer');
+
+    expect(query.populate).toHaveBeenCalledWith({
+      path: 'customer',
+      select: '-orderProducts -products',
+    });
+  });
 });

@@ -572,17 +572,19 @@ describe('FormQueryService', () => {
     expect(patientsModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'patient-id-1',
       { patient_name: 'Updated Patient' },
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(createHospital).toHaveBeenCalledWith({ name: 'New Hospital' });
     expect(nurseModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'nurse-id-1',
-      {
-        firstName: 'Elvin',
-        patient: 'p-updated',
-        hospitals: 'h-created',
-      },
-      { new: true },
+      expect.objectContaining({
+        $set: {
+          firstName: 'Elvin',
+          patient: 'p-updated',
+          hospitals: 'h-created',
+        },
+      }),
+      { returnDocument: 'after' },
     );
     expect(response).toEqual({ id: 'n-updated' });
   });
@@ -793,11 +795,13 @@ describe('FormQueryService', () => {
     });
     expect(customersModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'c1',
-      {
-        education: ['edu-old-1', 'edu-created-1'],
-        multi: true,
-      },
-      { new: true },
+      expect.objectContaining({
+        $set: {
+          education: ['edu-old-1', 'edu-created-1'],
+          multi: true,
+        },
+      }),
+      { returnDocument: 'after' },
     );
     expect(response).toEqual({
       id: 'c1',
@@ -884,16 +888,18 @@ describe('FormQueryService', () => {
         year: '2021',
         country: 'PK',
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(educationModel.create).not.toHaveBeenCalled();
     expect(customersModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'c1',
-      {
-        education: ['edu-existing-1'],
-        multi: true,
-      },
-      { new: true },
+      expect.objectContaining({
+        $set: {
+          education: ['edu-existing-1'],
+          multi: true,
+        },
+      }),
+      { returnDocument: 'after' },
     );
     expect(response).toEqual({
       id: 'c1',

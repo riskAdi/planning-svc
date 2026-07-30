@@ -616,7 +616,9 @@ export class FormQueryService {
     }
 
     const updated = (await model
-      .findByIdAndUpdate(parentId, updatePayload, { new: true })
+      .findByIdAndUpdate(parentId, updatePayload, {
+        returnDocument: 'after',
+      })
       .lean()
       .exec()) as unknown;
 
@@ -760,7 +762,9 @@ export class FormQueryService {
 
             if (allowUpdate && relationId) {
               const updated = (await relationModel
-                .findByIdAndUpdate(relationId, relationPayload, { new: true })
+                .findByIdAndUpdate(relationId, relationPayload, {
+                  returnDocument: 'after',
+                })
                 .exec()) as unknown;
 
               const updatedId = getObjectIdLike(updated);
