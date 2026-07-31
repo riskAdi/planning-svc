@@ -250,7 +250,32 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function getSchemaPathInstance(
+  model: Model<any>,
+  pathName: string,
+): string | undefined {
+  const schema = getModelSchema(model) as Schema & {
+    path?: (name: string) => { instance?: string } | undefined;
+    paths?: Record<string, { instance?: string }>;
+  };
+
+  const fromPaths = schema.paths?.[pathName]?.instance;
+  if (typeof fromPaths === 'string' && fromPaths.trim() !== '') {
+    return fromPaths;
+  }
+
+  if (typeof schema.path === 'function') {
+    const fromPathFn = schema.path(pathName)?.instance;
+    if (typeof fromPathFn === 'string' && fromPathFn.trim() !== '') {
+      return fromPathFn;
+    }
+  }
+
+  return undefined;
+}
+
 function toOrRegexFilter(
+  model: Model<any>,
   matchedFilter: Record<string, unknown>,
 ): Record<string, unknown> {
   const entries = Object.entries(matchedFilter);
@@ -258,25 +283,43 @@ function toOrRegexFilter(
     return {};
   }
 
-  const orClauses = entries.map(([key, value]) => {
-    if (typeof value === 'string') {
+  const andClauses: Record<string, unknown> = {};
+  const orClauses: Record<string, unknown>[] = [];
+
+  for (const [key, value] of entries) {
+    const schemaInstance = getSchemaPathInstance(model, key)?.toLowerCase();
+    const isStringPath = !schemaInstance || schemaInstance === 'string';
+
+    if (typeof value === 'string' && isStringPath) {
       const wildcardPattern = value
         .split('*')
         .map((segment) => escapeRegex(segment))
         .join('.*');
 
-      return {
+      orClauses.push({
         [key]: {
           $regex: wildcardPattern,
           $options: 'i',
         },
-      };
+      });
+      continue;
     }
 
-    return { [key]: value };
-  });
+    andClauses[key] = value;
+  }
 
-  return { $or: orClauses };
+  if (orClauses.length === 0) {
+    return andClauses;
+  }
+
+  if (Object.keys(andClauses).length === 0) {
+    return { $or: orClauses };
+  }
+
+  return {
+    ...andClauses,
+    $or: orClauses,
+  };
 }
 
 function toIdString(value: unknown): string | null {
@@ -442,7 +485,7 @@ export class FormQueryService {
 
     const parsedFilter = this.queryBuilder.parseSearch(search);
     const matchedFilter = toSchemaMatchedFilter(model, parsedFilter);
-    const filter = toOrRegexFilter(matchedFilter);
+    const filter = toOrRegexFilter(model, matchedFilter);
     const includes = this.relations.resolveIncludePaths(model, include);
     const skip = (page - 1) * limit;
 
