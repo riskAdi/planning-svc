@@ -35,6 +35,48 @@ export class OrderStatusHistory {
 export const OrderStatusHistorySchema =
   SchemaFactory.createForClass(OrderStatusHistory);
 
+function toObjectIdLike(
+  value: unknown,
+): mongoose.Types.ObjectId | string | null {
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value;
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const nestedId =
+    (value as { _id?: unknown })._id ?? (value as { id?: unknown }).id;
+
+  if (nestedId instanceof mongoose.Types.ObjectId) {
+    return nestedId;
+  }
+
+  if (typeof nestedId === 'string' && nestedId.trim() !== '') {
+    return nestedId;
+  }
+
+  return null;
+}
+
+OrderStatusHistorySchema.post('save', async function afterSave(doc) {
+  const orderId = toObjectIdLike(doc.order);
+  const statusId = toObjectIdLike(doc.status);
+
+  if (!orderId || !statusId) {
+    return;
+  }
+
+  await doc.model(Orders.name).findByIdAndUpdate(orderId, {
+    status: statusId,
+  });
+});
+
 import type { FormPermissions } from './permissions.types';
 
 export const OrderStatusHistoryPermissions: FormPermissions = {
