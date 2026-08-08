@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { FormModelDefinition } from '../form-model.registry';
 import type { PopulateOptions, Query, Schema, SchemaType } from 'mongoose';
 
-const MAX_POPULATE_DEPTH = 3;
+const MAX_POPULATE_DEPTH = 6;
 
 type SchemaWithExcludeAttributes = Schema & {
   excludeAttributes?: string[];

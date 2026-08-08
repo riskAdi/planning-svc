@@ -38,6 +38,12 @@ When adding a new domain area, prefer a feature module layout (module + controll
 - Avoid circular imports: prefer injecting models via `@nestjs/mongoose` patterns.
 - Validate inputs at the API boundary (DTOs / validation) before persisting.
 
+### Relation populate policy
+
+- Keep recursive ObjectId populate depth at `MAX_POPULATE_DEPTH = 6`.
+- Define it in `src/services/relation-resolver.service.ts`.
+- If this value changes, update related tests/docs in the same PR.
+
 ## How to respond in PR-ready form
 
 When implementing a change, provide:

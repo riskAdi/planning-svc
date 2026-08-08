@@ -28,7 +28,7 @@ export class Orders {
     type: mongoose.Schema.Types.ObjectId,
     ref: OrderStatus.name,
   })
-  orderStatus: mongoose.Types.ObjectId | OrderStatus;
+  status: mongoose.Types.ObjectId | OrderStatus;
 
   @Prop({
     required: false,
@@ -36,9 +36,6 @@ export class Orders {
     ref: OrderProducts.name,
   })
   orderProducts: Array<mongoose.Types.ObjectId | OrderProducts>;
-
-  @Prop({ required: false })
-  status: string;
 
   @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
   viewHistory: any;
@@ -69,4 +66,4 @@ export const OrdersPermissions: FormPermissions = {
     formPermissions?: FormPermissions;
     excludeAttributes?: string[];
   }
-).excludeAttributes = ['orderProducts', 'audit'];
+).excludeAttributes = ['orderProducts', 'audit']; // when fetched as subform
