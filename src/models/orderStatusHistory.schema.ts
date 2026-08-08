@@ -64,6 +64,18 @@ function toObjectIdLike(
   return null;
 }
 
+function toIdString(value: unknown): string | null {
+  if (value instanceof mongoose.Types.ObjectId) {
+    return value.toHexString();
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value;
+  }
+
+  return null;
+}
+
 OrderStatusHistorySchema.post('save', async function afterSave(doc) {
   const orderId = toObjectIdLike(doc.order);
   const statusId = toObjectIdLike(doc.status);
@@ -72,9 +84,45 @@ OrderStatusHistorySchema.post('save', async function afterSave(doc) {
     return;
   }
 
-  await doc.model(Orders.name).findByIdAndUpdate(orderId, {
-    status: statusId,
-  });
+  const ordersModel = doc.model(Orders.name);
+  const existingOrder = (await ordersModel
+    .findById(orderId)
+    .select('status')
+    .lean()
+    .exec()) as { status?: unknown } | null;
+
+  const previousStatus = toObjectIdLike(existingOrder?.status);
+  const previousStatusId = toIdString(previousStatus);
+  const nextStatusId = toIdString(statusId);
+
+  const updatePayload: Record<string, unknown> = {
+    $set: {
+      status: statusId,
+    },
+  };
+
+  if (nextStatusId && previousStatusId !== nextStatusId) {
+    updatePayload.$push = {
+      audit: {
+        changedAt: new Date(),
+        actorRole: 'system-afterSave',
+        changedFields: [
+          {
+            path: 'status',
+            relationName: OrderStatus.name,
+            from: previousStatusId,
+            to: nextStatusId,
+          },
+        ],
+      },
+    };
+  }
+
+  await ordersModel
+    .findByIdAndUpdate(orderId, updatePayload, {
+      strict: false,
+    })
+    .exec();
 });
 
 import type { FormPermissions } from './permissions.types';

@@ -705,9 +705,166 @@ describe('FormQueryService', () => {
           hospitals: 'h-created',
         },
       }),
-      { returnDocument: 'after' },
+      { returnDocument: 'after', strict: false },
     );
     expect(response).toEqual({ id: 'n-updated' });
+  });
+
+  it('adds relationName for ObjectId changes in audit changedFields', async () => {
+    const previousOrderId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1001');
+    const nextOrderId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1002');
+
+    const orderStatusHistoryModel = {
+      schema: {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('order', {
+            options: { ref: 'Orders' },
+          });
+          callback('statusLabel', {
+            options: {},
+          });
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'h1',
+            order: previousOrderId,
+            statusLabel: 'pending',
+          }),
+        }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'h1',
+            order: nextOrderId,
+            statusLabel: 'approved',
+          }),
+        }),
+      }),
+    };
+
+    const service = new FormQueryService(
+      {
+        resolveModel: jest.fn().mockReturnValue(orderStatusHistoryModel),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.update('orderStatusHistory', {
+      id: 'h1',
+      order: nextOrderId,
+      statusLabel: 'approved',
+    });
+
+    const updateCallArgs = orderStatusHistoryModel.findByIdAndUpdate.mock
+      .calls[0] as [string, Record<string, unknown>, Record<string, unknown>];
+
+    expect(updateCallArgs[0]).toBe('h1');
+    expect(updateCallArgs[2]).toEqual({
+      returnDocument: 'after',
+      strict: false,
+    });
+
+    const updatePayload = updateCallArgs[1];
+    const pushPayload = updatePayload.$push as
+      | {
+          audit?: {
+            changedFields?: unknown[];
+          };
+        }
+      | undefined;
+    const changedFields = pushPayload?.audit?.changedFields;
+
+    expect(changedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'order',
+          relationName: 'Orders',
+          from: previousOrderId.toHexString(),
+          to: nextOrderId.toHexString(),
+        }),
+        expect.objectContaining({
+          path: 'statusLabel',
+          from: 'pending',
+          to: 'approved',
+        }),
+      ]),
+    );
+  });
+
+  it('adds relationName for ObjectId array relation changes in audit changedFields', async () => {
+    const previousProductId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1101');
+    const nextProductId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1102');
+
+    const ordersModel = {
+      schema: {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('orderProducts', {
+            caster: { options: { ref: 'OrderProducts' } },
+          });
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'o1',
+            orderProducts: [previousProductId],
+          }),
+        }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'o1',
+            orderProducts: [previousProductId, nextProductId],
+          }),
+        }),
+      }),
+    };
+
+    const service = new FormQueryService(
+      {
+        resolveModel: jest.fn().mockReturnValue(ordersModel),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.update('orders', {
+      id: 'o1',
+      orderProducts: [nextProductId],
+    });
+
+    const updateCallArgs = ordersModel.findByIdAndUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
+    const updatePayload = updateCallArgs[1];
+    const pushPayload = updatePayload.$push as
+      | {
+          audit?: {
+            changedFields?: unknown[];
+          };
+        }
+      | undefined;
+    const changedFields = pushPayload?.audit?.changedFields;
+
+    expect(changedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'orderProducts',
+          relationName: 'OrderProducts',
+        }),
+      ]),
+    );
   });
 
   it('creates subform record with parent_id when payload contains subform key', async () => {
@@ -922,7 +1079,7 @@ describe('FormQueryService', () => {
           multi: true,
         },
       }),
-      { returnDocument: 'after' },
+      { returnDocument: 'after', strict: false },
     );
     expect(response).toEqual({
       id: 'c1',
@@ -1020,7 +1177,7 @@ describe('FormQueryService', () => {
           multi: true,
         },
       }),
-      { returnDocument: 'after' },
+      { returnDocument: 'after', strict: false },
     );
     expect(response).toEqual({
       id: 'c1',

@@ -394,7 +394,68 @@ type AuditChange = {
   path: string;
   from?: unknown;
   to?: unknown;
+  relationName?: string;
 };
+
+function isObjectIdLikeAuditValue(value: unknown): boolean {
+  if (value instanceof Types.ObjectId) {
+    return true;
+  }
+
+  if (typeof value === 'string') {
+    return /^[a-fA-F0-9]{24}$/.test(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => isObjectIdLikeAuditValue(item));
+  }
+
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  const nestedId = value.id ?? value._id;
+  if (nestedId !== undefined) {
+    return isObjectIdLikeAuditValue(nestedId);
+  }
+
+  return Object.values(value).some((item) => isObjectIdLikeAuditValue(item));
+}
+
+function enrichAuditChangesWithRelationName(
+  model: Model<any>,
+  changes: AuditChange[],
+): AuditChange[] {
+  if (changes.length === 0) {
+    return changes;
+  }
+
+  const relationNameByPath = new Map(
+    getRelationInfo(model).map((relation) => [
+      relation.path,
+      relation.refModelName,
+    ]),
+  );
+
+  return changes.map((change) => {
+    const relationName = relationNameByPath.get(change.path);
+    if (!relationName) {
+      return change;
+    }
+
+    if (
+      !isObjectIdLikeAuditValue(change.from) &&
+      !isObjectIdLikeAuditValue(change.to)
+    ) {
+      return change;
+    }
+
+    return {
+      ...change,
+      relationName,
+    };
+  });
+}
 
 function normalizeAuditValue(value: unknown): unknown {
   if (value instanceof Types.ObjectId) {
@@ -633,7 +694,10 @@ export class FormQueryService {
 
     this.mergeArrayRelationsWithExisting(model, existing, normalizedPayload);
 
-    const changedFields = diffChangedFields(existing, normalizedPayload);
+    const changedFields = enrichAuditChangesWithRelationName(
+      model,
+      diffChangedFields(existing, normalizedPayload),
+    );
     const hasAuditKey = Reflect.has(existing, 'audit');
 
     const setPayload: Record<string, unknown> = {
@@ -661,6 +725,7 @@ export class FormQueryService {
     const updated = (await model
       .findByIdAndUpdate(parentId, updatePayload, {
         returnDocument: 'after',
+        strict: false,
       })
       .lean()
       .exec()) as unknown;
