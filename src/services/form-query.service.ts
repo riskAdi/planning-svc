@@ -8,6 +8,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Types, type Model, type Schema, type SchemaType } from 'mongoose';
 
 import type { FormModelDefinition } from '../form-model.registry';
+import { excludeAuditFieldsFromResponse } from '../utils/response-sanitizer.util';
 
 import { FormModelRegistryService } from './form-model-registry.service';
 import { QueryBuilderService } from './query-builder.service';
@@ -563,9 +564,12 @@ export class FormQueryService {
     const filteredData = transformedData.map((item) =>
       this.filterReadableFields(item, permissions, role),
     );
+    const sanitizedData = excludeAuditFieldsFromResponse(
+      filteredData,
+    ) as unknown[];
 
     return {
-      data: filteredData,
+      data: sanitizedData,
       meta: {
         formName,
         page,
@@ -599,7 +603,13 @@ export class FormQueryService {
       );
     }
 
-    return this.filterReadableFields(transformIds(data), permissions, role);
+    const filteredData = this.filterReadableFields(
+      transformIds(data),
+      permissions,
+      role,
+    );
+
+    return excludeAuditFieldsFromResponse(filteredData);
   }
 
   async create(formName: string, payload: Payload, userRole?: string) {

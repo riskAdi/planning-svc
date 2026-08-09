@@ -51,7 +51,6 @@ describe('FormQueryService', () => {
       {
         id: '6a36e9d7865d1c0de3ec2ee7',
         firstName: 'First Name',
-        createdAt: '2026-06-20T19:28:23.753Z',
         patient: {
           id: '6a36e9d7865d1c0de3ec2ee5',
           admission_date: '2021-09-27T19:00:00.000Z',
