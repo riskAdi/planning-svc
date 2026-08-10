@@ -390,6 +390,158 @@ describe('FormQueryService', () => {
     });
   });
 
+  it('returns audit for a specific parent record id', async () => {
+    const exec = jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId('6a36e9d7865d1c0de3ec2ee7'),
+      audit: [{ changedAt: new Date('2026-08-09T00:00:00.000Z') }],
+    });
+    const lean = jest.fn().mockReturnValue({ exec });
+    const select = jest.fn().mockReturnValue({ lean });
+
+    const ordersModel = {
+      findOne: jest.fn().mockReturnValue({ select, lean }),
+      schema: {
+        eachPath: jest.fn(),
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(ordersModel) } as never,
+      { parseSearch: jest.fn() } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.findAuditById('orders', 'order-1');
+
+    expect(ordersModel.findOne).toHaveBeenCalledWith({
+      _id: 'order-1',
+      $or: [{ parent_id: { $exists: false } }, { parent_id: null }],
+    });
+    expect(select).toHaveBeenCalledWith('audit');
+    expect(result).toEqual({
+      id: '6a36e9d7865d1c0de3ec2ee7',
+      audit: [{ changedAt: '2026-08-09T00:00:00.000Z' }],
+    });
+  });
+
+  it('resolves changedFields from/to ObjectIds using relationName', async () => {
+    const fromStatusId = '6a63cde5571a529c214a48ad';
+    const toStatusId = '6a63cde5571a529c214a48af';
+
+    const auditExec = jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId('6a63b2aae93bdf502531c928'),
+      audit: [
+        {
+          changedAt: new Date('2026-08-08T11:31:02.952Z'),
+          actorRole: 'system-afterSave',
+          changedFields: [
+            {
+              path: 'status',
+              from: fromStatusId,
+              to: toStatusId,
+              relationName: 'OrderStatus',
+              _id: new Types.ObjectId('6a77137697ae50a36c6b7748'),
+            },
+          ],
+          _id: new Types.ObjectId('6a77137697ae50a36c6b7747'),
+        },
+      ],
+    });
+    const auditLean = jest.fn().mockReturnValue({ exec: auditExec });
+    const auditSelect = jest.fn().mockReturnValue({ lean: auditLean });
+
+    const ordersModel = {
+      findOne: jest
+        .fn()
+        .mockReturnValue({ select: auditSelect, lean: auditLean }),
+      schema: {
+        eachPath: jest.fn(),
+      },
+    };
+
+    const orderStatusExec = jest
+      .fn()
+      .mockResolvedValueOnce({ _id: fromStatusId, label: 'Pending' })
+      .mockResolvedValueOnce({ _id: toStatusId, label: 'Completed' });
+    const orderStatusLean = jest
+      .fn()
+      .mockReturnValue({ exec: orderStatusExec });
+    const orderStatusSelect = jest
+      .fn()
+      .mockReturnValue({ lean: orderStatusLean });
+    const orderStatusFindById = jest
+      .fn()
+      .mockReturnValue({ select: orderStatusSelect, lean: orderStatusLean });
+
+    const orderStatusModel = {
+      findById: orderStatusFindById,
+      schema: {
+        eachPath: jest.fn(),
+      },
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') {
+          return ordersModel;
+        }
+
+        if (modelName === 'OrderStatus') {
+          return orderStatusModel;
+        }
+
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      { parseSearch: jest.fn() } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.findAuditById(
+      'orders',
+      '6a63b2aae93bdf502531c928',
+    );
+
+    expect(orderStatusFindById).toHaveBeenNthCalledWith(1, fromStatusId);
+    expect(orderStatusFindById).toHaveBeenNthCalledWith(2, toStatusId);
+    expect(orderStatusSelect).toHaveBeenNthCalledWith(
+      1,
+      'name label text firstName lastName',
+    );
+    expect(orderStatusSelect).toHaveBeenNthCalledWith(
+      2,
+      'name label text firstName lastName',
+    );
+    expect(result).toEqual({
+      id: '6a63b2aae93bdf502531c928',
+      audit: [
+        {
+          changedAt: '2026-08-08T11:31:02.952Z',
+          actorRole: 'system-afterSave',
+          changedFields: [
+            {
+              path: 'status',
+              from: { id: fromStatusId, label: 'Pending' },
+              to: { id: toStatusId, label: 'Completed' },
+              relationName: 'OrderStatus',
+              id: '6a77137697ae50a36c6b7748',
+            },
+          ],
+          id: '6a77137697ae50a36c6b7747',
+        },
+      ],
+    });
+  });
+
   it('keeps ObjectId schema fields as exact match for string search values', async () => {
     const exec = jest.fn().mockResolvedValue([]);
     const lean = jest.fn().mockReturnValue({ exec });

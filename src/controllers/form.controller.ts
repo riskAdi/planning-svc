@@ -43,6 +43,17 @@ export class FormController {
     );
   }
 
+  @Get(':formName/:id/audit')
+  async getFormAuditDataById(
+    @Param('formName') formName: string,
+    @Param('id') id: string,
+    @Headers('x-user-role') userRole?: string,
+    @Headers('x-role') fallbackRole?: string,
+  ) {
+    const role = this.resolveRole(userRole, fallbackRole);
+    return this.formQuery.findAuditById(formName, id, role);
+  }
+
   @Get(':formName/:id')
   async getFormDataById(
     @Param('formName') formName: string,

@@ -423,6 +423,32 @@ function isObjectIdLikeAuditValue(value: unknown): boolean {
   return Object.values(value).some((item) => isObjectIdLikeAuditValue(item));
 }
 
+function toHexObjectIdString(value: unknown): string | null {
+  if (value instanceof Types.ObjectId) {
+    return value.toHexString();
+  }
+
+  if (typeof value === 'string' && /^[a-fA-F0-9]{24}$/.test(value)) {
+    return value;
+  }
+
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  const nested = value.id ?? value._id;
+
+  if (nested instanceof Types.ObjectId) {
+    return nested.toHexString();
+  }
+
+  if (typeof nested === 'string' && /^[a-fA-F0-9]{24}$/.test(nested)) {
+    return nested;
+  }
+
+  return null;
+}
+
 function enrichAuditChangesWithRelationName(
   model: Model<any>,
   changes: AuditChange[],
@@ -610,6 +636,165 @@ export class FormQueryService {
     );
 
     return excludeAuditFieldsFromResponse(filteredData);
+  }
+
+  async findAuditById(formName: string, id: string, userRole?: string) {
+    const model = this.registry.resolveModel(formName);
+    const role = normalizeRole(userRole);
+    const permissions = getModelPermissions(model);
+    this.assertFormPermission(formName, permissions, 'read', role);
+
+    const parentOnlyFilter: Record<string, unknown> = {
+      _id: id,
+      $or: [{ parent_id: { $exists: false } }, { parent_id: null }],
+    };
+
+    const data = (await model
+      .findOne(parentOnlyFilter)
+      .select('audit')
+      .lean()
+      .exec()) as Record<string, unknown> | null;
+
+    if (!data) {
+      throw new NotFoundException(
+        `No parent record found for formName "${formName}" and id "${id}".`,
+      );
+    }
+
+    const transformed = transformIds(data) as Record<string, unknown>;
+    const enrichedAudit = await this.enrichAuditRelations(
+      Array.isArray(transformed.audit) ? transformed.audit : [],
+    );
+
+    return {
+      id: typeof transformed.id === 'string' ? transformed.id : id,
+      audit: enrichedAudit,
+    };
+  }
+
+  private async enrichAuditRelations(
+    auditEntries: unknown[],
+  ): Promise<unknown[]> {
+    const relationCache = new Map<
+      string,
+      Promise<Record<string, unknown> | null>
+    >();
+
+    return Promise.all(
+      auditEntries.map(async (auditEntry) => {
+        if (!isPlainObject(auditEntry)) {
+          return auditEntry;
+        }
+
+        const rawChangedFields = Reflect.get(auditEntry, 'changedFields');
+        if (!Array.isArray(rawChangedFields)) {
+          return auditEntry;
+        }
+        const changedFields = rawChangedFields as unknown[];
+
+        const enrichedChangedFields = await Promise.all(
+          changedFields.map(async (change: unknown) => {
+            if (!isPlainObject(change)) {
+              return change;
+            }
+
+            const relationName =
+              typeof change.relationName === 'string' &&
+              change.relationName.trim() !== ''
+                ? change.relationName
+                : undefined;
+
+            if (!relationName) {
+              return change;
+            }
+
+            const from = await this.resolveAuditRelationValue(
+              change.from,
+              relationName,
+              relationCache,
+            );
+            const to = await this.resolveAuditRelationValue(
+              change.to,
+              relationName,
+              relationCache,
+            );
+
+            return {
+              ...change,
+              from,
+              to,
+            };
+          }),
+        );
+
+        return {
+          ...auditEntry,
+          changedFields: enrichedChangedFields,
+        };
+      }),
+    );
+  }
+
+  private async resolveAuditRelationValue(
+    value: unknown,
+    relationName: string,
+    relationCache: Map<string, Promise<Record<string, unknown> | null>>,
+  ): Promise<unknown> {
+    if (Array.isArray(value)) {
+      return Promise.all(
+        value.map((item) =>
+          this.resolveAuditRelationValue(item, relationName, relationCache),
+        ),
+      );
+    }
+
+    const objectId = toHexObjectIdString(value);
+    if (!objectId) {
+      return value;
+    }
+
+    const cacheKey = `${relationName}:${objectId}`;
+    const cached = relationCache.get(cacheKey);
+    if (cached) {
+      const cachedValue = await cached;
+      return cachedValue ?? value;
+    }
+
+    const fetchPromise = this.fetchRelatedRecordByRelationName(
+      relationName,
+      objectId,
+    );
+    relationCache.set(cacheKey, fetchPromise);
+
+    const resolved = await fetchPromise;
+    return resolved ?? value;
+  }
+
+  private async fetchRelatedRecordByRelationName(
+    relationName: string,
+    id: string,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      const relationModel = this.registry.resolveModel(relationName);
+      const related: unknown = await relationModel
+        .findById(id)
+        .select('name label text firstName lastName')
+        .lean()
+        .exec();
+
+      if (!related) {
+        return null;
+      }
+
+      const transformed = transformIds(related);
+      if (!isPlainObject(transformed)) {
+        return null;
+      }
+
+      return transformed;
+    } catch {
+      return null;
+    }
   }
 
   async create(formName: string, payload: Payload, userRole?: string) {
