@@ -8,6 +8,7 @@ const auditChangeSchema = new Schema(
     path: { type: String, required: true },
     from: { type: Schema.Types.Mixed, required: false },
     to: { type: Schema.Types.Mixed, required: false },
+    relationName: { type: String, required: false },
   },
   { _id: false },
 );

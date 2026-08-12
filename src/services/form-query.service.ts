@@ -275,6 +275,32 @@ function getSchemaPathInstance(
   return undefined;
 }
 
+function toTimestamp(value: unknown): number {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+  }
+
+  return Number.NEGATIVE_INFINITY;
+}
+
+function sortAuditByChangedAtDesc(entries: unknown[]): unknown[] {
+  return [...entries].sort((left, right) => {
+    const leftChangedAt =
+      isPlainObject(left) && 'changedAt' in left ? left.changedAt : undefined;
+    const rightChangedAt =
+      isPlainObject(right) && 'changedAt' in right
+        ? right.changedAt
+        : undefined;
+
+    return toTimestamp(rightChangedAt) - toTimestamp(leftChangedAt);
+  });
+}
+
 function toOrRegexFilter(
   model: Model<any>,
   matchedFilter: Record<string, unknown>,
@@ -436,6 +462,12 @@ function toHexObjectIdString(value: unknown): string | null {
     return null;
   }
 
+  const keys = Object.keys(value);
+  const hasExpandedFields = keys.some((key) => key !== 'id' && key !== '_id');
+  if (hasExpandedFields) {
+    return null;
+  }
+
   const nested = value.id ?? value._id;
 
   if (nested instanceof Types.ObjectId) {
@@ -465,17 +497,14 @@ function enrichAuditChangesWithRelationName(
   );
 
   return changes.map((change) => {
-    const relationName = relationNameByPath.get(change.path);
-    if (!relationName) {
-      return change;
-    }
-
     if (
       !isObjectIdLikeAuditValue(change.from) &&
       !isObjectIdLikeAuditValue(change.to)
     ) {
       return change;
     }
+
+    const relationName = relationNameByPath.get(change.path) ?? change.path;
 
     return {
       ...change,
@@ -662,77 +691,14 @@ export class FormQueryService {
     }
 
     const transformed = transformIds(data) as Record<string, unknown>;
-    const enrichedAudit = await this.enrichAuditRelations(
+    const sortedAudit = sortAuditByChangedAtDesc(
       Array.isArray(transformed.audit) ? transformed.audit : [],
     );
 
     return {
       id: typeof transformed.id === 'string' ? transformed.id : id,
-      audit: enrichedAudit,
+      audit: sortedAudit,
     };
-  }
-
-  private async enrichAuditRelations(
-    auditEntries: unknown[],
-  ): Promise<unknown[]> {
-    const relationCache = new Map<
-      string,
-      Promise<Record<string, unknown> | null>
-    >();
-
-    return Promise.all(
-      auditEntries.map(async (auditEntry) => {
-        if (!isPlainObject(auditEntry)) {
-          return auditEntry;
-        }
-
-        const rawChangedFields = Reflect.get(auditEntry, 'changedFields');
-        if (!Array.isArray(rawChangedFields)) {
-          return auditEntry;
-        }
-        const changedFields = rawChangedFields as unknown[];
-
-        const enrichedChangedFields = await Promise.all(
-          changedFields.map(async (change: unknown) => {
-            if (!isPlainObject(change)) {
-              return change;
-            }
-
-            const relationName =
-              typeof change.relationName === 'string' &&
-              change.relationName.trim() !== ''
-                ? change.relationName
-                : undefined;
-
-            if (!relationName) {
-              return change;
-            }
-
-            const from = await this.resolveAuditRelationValue(
-              change.from,
-              relationName,
-              relationCache,
-            );
-            const to = await this.resolveAuditRelationValue(
-              change.to,
-              relationName,
-              relationCache,
-            );
-
-            return {
-              ...change,
-              from,
-              to,
-            };
-          }),
-        );
-
-        return {
-          ...auditEntry,
-          changedFields: enrichedChangedFields,
-        };
-      }),
-    );
   }
 
   private async resolveAuditRelationValue(
@@ -778,7 +744,7 @@ export class FormQueryService {
       const relationModel = this.registry.resolveModel(relationName);
       const related: unknown = await relationModel
         .findById(id)
-        .select('name label text firstName lastName')
+        .select('name label title text firstName lastName')
         .lean()
         .exec();
 
@@ -795,6 +761,101 @@ export class FormQueryService {
     } catch {
       return null;
     }
+  }
+
+  private enrichAuditRelationsInBackground(
+    model: Model<any>,
+    parentId: string | Types.ObjectId,
+    changedAt: Date,
+    actorRole: string | undefined,
+    changedFields: AuditChange[],
+  ) {
+    const shouldResolveRelations = changedFields.some(
+      (change) =>
+        typeof change.relationName === 'string' && change.relationName !== '',
+    );
+
+    if (!shouldResolveRelations) {
+      return;
+    }
+
+    void this.persistResolvedAuditRelations(
+      model,
+      parentId,
+      changedAt,
+      actorRole,
+      changedFields,
+    ).catch(() => undefined);
+  }
+
+  private async persistResolvedAuditRelations(
+    model: Model<any>,
+    parentId: string | Types.ObjectId,
+    changedAt: Date,
+    actorRole: string | undefined,
+    changedFields: AuditChange[],
+  ): Promise<void> {
+    const relationCache = new Map<
+      string,
+      Promise<Record<string, unknown> | null>
+    >();
+
+    const resolvedChangedFields: AuditChange[] = await Promise.all(
+      changedFields.map(async (change): Promise<AuditChange> => {
+        if (
+          typeof change.relationName !== 'string' ||
+          change.relationName.trim() === ''
+        ) {
+          return change;
+        }
+
+        const from = await this.resolveAuditRelationValue(
+          change.from,
+          change.relationName,
+          relationCache,
+        );
+        const to = await this.resolveAuditRelationValue(
+          change.to,
+          change.relationName,
+          relationCache,
+        );
+
+        return {
+          ...change,
+          from,
+          to,
+        };
+      }),
+    );
+
+    if (isDeepStrictEqual(resolvedChangedFields, changedFields)) {
+      return;
+    }
+
+    const entryFilter: Record<string, unknown> = {
+      'entry.changedAt': changedAt,
+    };
+
+    if (typeof actorRole === 'string' && actorRole.trim() !== '') {
+      entryFilter['entry.actorRole'] = actorRole;
+    } else {
+      entryFilter['entry.actorRole'] = { $exists: false };
+    }
+
+    await model
+      .findByIdAndUpdate(
+        parentId,
+        {
+          $set: {
+            'audit.$[entry].changedFields': resolvedChangedFields,
+          },
+        },
+        {
+          arrayFilters: [entryFilter],
+          strict: false,
+        },
+      )
+      .exec();
   }
 
   async create(formName: string, payload: Payload, userRole?: string) {
@@ -907,10 +968,12 @@ export class FormQueryService {
       $set: setPayload,
     };
 
+    const changedAt = new Date();
+
     if (changedFields.length > 0) {
       updatePayload.$push = {
         audit: {
-          changedAt: new Date(),
+          changedAt,
           actorRole: role,
           changedFields,
         },
@@ -928,6 +991,16 @@ export class FormQueryService {
     if (!updated) {
       throw new NotFoundException(
         `No record found for formName "${formName}" and id "${String(parentId)}".`,
+      );
+    }
+
+    if (changedFields.length > 0) {
+      this.enrichAuditRelationsInBackground(
+        model,
+        parentId,
+        changedAt,
+        role,
+        changedFields,
       );
     }
 

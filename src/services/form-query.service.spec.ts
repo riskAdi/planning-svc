@@ -393,7 +393,10 @@ describe('FormQueryService', () => {
   it('returns audit for a specific parent record id', async () => {
     const exec = jest.fn().mockResolvedValue({
       _id: new Types.ObjectId('6a36e9d7865d1c0de3ec2ee7'),
-      audit: [{ changedAt: new Date('2026-08-09T00:00:00.000Z') }],
+      audit: [
+        { changedAt: new Date('2026-08-08T00:00:00.000Z') },
+        { changedAt: new Date('2026-08-09T00:00:00.000Z') },
+      ],
     });
     const lean = jest.fn().mockReturnValue({ exec });
     const select = jest.fn().mockReturnValue({ lean });
@@ -423,11 +426,14 @@ describe('FormQueryService', () => {
     expect(select).toHaveBeenCalledWith('audit');
     expect(result).toEqual({
       id: '6a36e9d7865d1c0de3ec2ee7',
-      audit: [{ changedAt: '2026-08-09T00:00:00.000Z' }],
+      audit: [
+        { changedAt: '2026-08-09T00:00:00.000Z' },
+        { changedAt: '2026-08-08T00:00:00.000Z' },
+      ],
     });
   });
 
-  it('resolves changedFields from/to ObjectIds using relationName', async () => {
+  it('returns stored changedFields values without resolving relations', async () => {
     const fromStatusId = '6a63cde5571a529c214a48ad';
     const toStatusId = '6a63cde5571a529c214a48af';
 
@@ -462,35 +468,10 @@ describe('FormQueryService', () => {
       },
     };
 
-    const orderStatusExec = jest
-      .fn()
-      .mockResolvedValueOnce({ _id: fromStatusId, label: 'Pending' })
-      .mockResolvedValueOnce({ _id: toStatusId, label: 'Completed' });
-    const orderStatusLean = jest
-      .fn()
-      .mockReturnValue({ exec: orderStatusExec });
-    const orderStatusSelect = jest
-      .fn()
-      .mockReturnValue({ lean: orderStatusLean });
-    const orderStatusFindById = jest
-      .fn()
-      .mockReturnValue({ select: orderStatusSelect, lean: orderStatusLean });
-
-    const orderStatusModel = {
-      findById: orderStatusFindById,
-      schema: {
-        eachPath: jest.fn(),
-      },
-    };
-
     const registry = {
       resolveModel: jest.fn((modelName: string) => {
         if (modelName === 'orders') {
           return ordersModel;
-        }
-
-        if (modelName === 'OrderStatus') {
-          return orderStatusModel;
         }
 
         throw new Error(`Unexpected model lookup for ${modelName}`);
@@ -511,16 +492,8 @@ describe('FormQueryService', () => {
       '6a63b2aae93bdf502531c928',
     );
 
-    expect(orderStatusFindById).toHaveBeenNthCalledWith(1, fromStatusId);
-    expect(orderStatusFindById).toHaveBeenNthCalledWith(2, toStatusId);
-    expect(orderStatusSelect).toHaveBeenNthCalledWith(
-      1,
-      'name label text firstName lastName',
-    );
-    expect(orderStatusSelect).toHaveBeenNthCalledWith(
-      2,
-      'name label text firstName lastName',
-    );
+    expect(registry.resolveModel).toHaveBeenCalledWith('orders');
+    expect(registry.resolveModel).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       id: '6a63b2aae93bdf502531c928',
       audit: [
@@ -530,8 +503,8 @@ describe('FormQueryService', () => {
           changedFields: [
             {
               path: 'status',
-              from: { id: fromStatusId, label: 'Pending' },
-              to: { id: toStatusId, label: 'Completed' },
+              from: fromStatusId,
+              to: toStatusId,
               relationName: 'OrderStatus',
               id: '6a77137697ae50a36c6b7748',
             },
