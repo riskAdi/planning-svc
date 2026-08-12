@@ -1524,23 +1524,30 @@ export const ruleLookupData = [
 export const orderStatusData = [
   {
     name: 'Pending',
+    slug: 'pending',
   },
   {
     name: 'Processing',
+    slug: 'processing',
   },
   {
     name: 'Shipped',
+    slug: 'shipped',
   },
   {
     name: 'Delivered',
+    slug: 'delivered',
   },
   {
     name: 'Cancelled',
+    slug: 'cancelled',
   },
   {
     name: 'Done',
+    slug: 'done',
   },
   {
     name: 'Disputed',
+    slug: 'disputed',
   },
 ];

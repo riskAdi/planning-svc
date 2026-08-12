@@ -50,6 +50,14 @@ const MONGODB_URI =
   process.env.MONGODB_URI ||
   'mongodb://planning_admin:planning_password@localhost:27017/planning?authSource=admin';
 
+function toSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 async function seedDatabase() {
   try {
     await mongoose.connect(MONGODB_URI);
@@ -342,12 +350,20 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding OrderStatus...');
     const orderStatusResults = await Promise.all(
-      orderStatusData.map((data) =>
-        OrderStatusModel.findOneAndUpdate({ name: data.name }, data, {
-          upsert: true,
-          returnDocument: 'after',
-        }),
-      ),
+      orderStatusData.map((data) => {
+        const slug = data.slug ?? toSlug(data.name);
+
+        return OrderStatusModel.findOneAndUpdate(
+          {
+            $or: [{ slug }, { name: data.name }],
+          },
+          { ...data, slug },
+          {
+            upsert: true,
+            returnDocument: 'after',
+          },
+        );
+      }),
     );
     console.log(`✓ OrderStatus seeded (${orderStatusResults.length} records)`);
 

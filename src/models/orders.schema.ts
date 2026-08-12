@@ -28,7 +28,7 @@ export class Orders {
     type: mongoose.Schema.Types.ObjectId,
     ref: OrderStatus.name,
   })
-  orderStatus: mongoose.Types.ObjectId | OrderStatus;
+  status: mongoose.Types.ObjectId | OrderStatus;
 
   @Prop({
     required: false,
@@ -37,11 +37,37 @@ export class Orders {
   })
   orderProducts: Array<mongoose.Types.ObjectId | OrderProducts>;
 
-  @Prop({ required: false })
-  status: string;
-
   @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
   viewHistory: any;
+
+  @Prop({
+    required: false,
+    type: [
+      {
+        changedAt: { type: Date },
+        actorRole: { type: String },
+        changedFields: [
+          {
+            path: { type: String },
+            from: { type: mongoose.Schema.Types.Mixed },
+            to: { type: mongoose.Schema.Types.Mixed },
+            relationName: { type: String },
+          },
+        ],
+      },
+    ],
+    default: [],
+  })
+  audit: Array<{
+    changedAt?: Date;
+    actorRole?: string;
+    changedFields?: Array<{
+      path?: string;
+      from?: unknown;
+      to?: unknown;
+      relationName?: string;
+    }>;
+  }>;
 }
 
 export const OrdersSchema = SchemaFactory.createForClass(Orders);
@@ -58,5 +84,15 @@ export const OrdersPermissions: FormPermissions = {
 };
 
 (
-  OrdersSchema as unknown as { formPermissions?: FormPermissions }
+  OrdersSchema as unknown as {
+    formPermissions?: FormPermissions;
+    excludeAttributes?: string[];
+  }
 ).formPermissions = OrdersPermissions;
+
+(
+  OrdersSchema as unknown as {
+    formPermissions?: FormPermissions;
+    excludeAttributes?: string[];
+  }
+).excludeAttributes = ['orderProducts', 'audit']; // when fetched as subform

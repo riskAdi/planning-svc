@@ -51,7 +51,6 @@ describe('FormQueryService', () => {
       {
         id: '6a36e9d7865d1c0de3ec2ee7',
         firstName: 'First Name',
-        createdAt: '2026-06-20T19:28:23.753Z',
         patient: {
           id: '6a36e9d7865d1c0de3ec2ee5',
           admission_date: '2021-09-27T19:00:00.000Z',
@@ -324,6 +323,252 @@ describe('FormQueryService', () => {
     });
   });
 
+  it('applies mongo object filters as AND and string filters as OR', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          orderId: {},
+          customerName: {},
+        },
+        eachPath: jest.fn(),
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(ordersModel) } as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          orderId: { $in: ['ORD-1001', 'ORD-1002'] },
+          customerName: 'john',
+          invalid_key: { $exists: true },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find('orders', undefined, undefined);
+
+    expect(ordersModel.find).toHaveBeenCalledWith({
+      orderId: { $in: ['ORD-1001', 'ORD-1002'] },
+      $or: [
+        {
+          customerName: {
+            $regex: 'john',
+            $options: 'i',
+          },
+        },
+      ],
+    });
+    expect(ordersModel.countDocuments).toHaveBeenCalledWith({
+      orderId: { $in: ['ORD-1001', 'ORD-1002'] },
+      $or: [
+        {
+          customerName: {
+            $regex: 'john',
+            $options: 'i',
+          },
+        },
+      ],
+    });
+  });
+
+  it('returns audit for a specific parent record id', async () => {
+    const exec = jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId('6a36e9d7865d1c0de3ec2ee7'),
+      audit: [
+        { changedAt: new Date('2026-08-08T00:00:00.000Z') },
+        { changedAt: new Date('2026-08-09T00:00:00.000Z') },
+      ],
+    });
+    const lean = jest.fn().mockReturnValue({ exec });
+    const select = jest.fn().mockReturnValue({ lean });
+
+    const ordersModel = {
+      findOne: jest.fn().mockReturnValue({ select, lean }),
+      schema: {
+        eachPath: jest.fn(),
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(ordersModel) } as never,
+      { parseSearch: jest.fn() } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.findAuditById('orders', 'order-1');
+
+    expect(ordersModel.findOne).toHaveBeenCalledWith({
+      _id: 'order-1',
+      $or: [{ parent_id: { $exists: false } }, { parent_id: null }],
+    });
+    expect(select).toHaveBeenCalledWith('audit');
+    expect(result).toEqual({
+      id: '6a36e9d7865d1c0de3ec2ee7',
+      audit: [
+        { changedAt: '2026-08-09T00:00:00.000Z' },
+        { changedAt: '2026-08-08T00:00:00.000Z' },
+      ],
+    });
+  });
+
+  it('returns stored changedFields values without resolving relations', async () => {
+    const fromStatusId = '6a63cde5571a529c214a48ad';
+    const toStatusId = '6a63cde5571a529c214a48af';
+
+    const auditExec = jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId('6a63b2aae93bdf502531c928'),
+      audit: [
+        {
+          changedAt: new Date('2026-08-08T11:31:02.952Z'),
+          actorRole: 'system-afterSave',
+          changedFields: [
+            {
+              path: 'status',
+              from: fromStatusId,
+              to: toStatusId,
+              relationName: 'OrderStatus',
+              _id: new Types.ObjectId('6a77137697ae50a36c6b7748'),
+            },
+          ],
+          _id: new Types.ObjectId('6a77137697ae50a36c6b7747'),
+        },
+      ],
+    });
+    const auditLean = jest.fn().mockReturnValue({ exec: auditExec });
+    const auditSelect = jest.fn().mockReturnValue({ lean: auditLean });
+
+    const ordersModel = {
+      findOne: jest
+        .fn()
+        .mockReturnValue({ select: auditSelect, lean: auditLean }),
+      schema: {
+        eachPath: jest.fn(),
+      },
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') {
+          return ordersModel;
+        }
+
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      { parseSearch: jest.fn() } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.findAuditById(
+      'orders',
+      '6a63b2aae93bdf502531c928',
+    );
+
+    expect(registry.resolveModel).toHaveBeenCalledWith('orders');
+    expect(registry.resolveModel).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      id: '6a63b2aae93bdf502531c928',
+      audit: [
+        {
+          changedAt: '2026-08-08T11:31:02.952Z',
+          actorRole: 'system-afterSave',
+          changedFields: [
+            {
+              path: 'status',
+              from: fromStatusId,
+              to: toStatusId,
+              relationName: 'OrderStatus',
+              id: '6a77137697ae50a36c6b7748',
+            },
+          ],
+          id: '6a77137697ae50a36c6b7747',
+        },
+      ],
+    });
+  });
+
+  it('keeps ObjectId schema fields as exact match for string search values', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const orderStatusHistoryModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          order: { instance: 'ObjectId' },
+        },
+        eachPath: jest.fn(),
+      },
+    };
+
+    const service = new FormQueryService(
+      {
+        resolveModel: jest.fn().mockReturnValue(orderStatusHistoryModel),
+      } as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          order: '6a63b2aae93bdf502531c928',
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orderStatusHistory',
+      '{"order":"6a63b2aae93bdf502531c928"}',
+      undefined,
+    );
+
+    expect(orderStatusHistoryModel.find).toHaveBeenCalledWith({
+      order: '6a63b2aae93bdf502531c928',
+    });
+    expect(orderStatusHistoryModel.countDocuments).toHaveBeenCalledWith({
+      order: '6a63b2aae93bdf502531c928',
+    });
+  });
+
   it('creates nested subforms from schema relation fields and saves parent with references', async () => {
     const createPatient = jest.fn().mockResolvedValue({ _id: 'p1' });
     const createHospital = jest.fn().mockResolvedValue({ _id: 'h1' });
@@ -572,19 +817,178 @@ describe('FormQueryService', () => {
     expect(patientsModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'patient-id-1',
       { patient_name: 'Updated Patient' },
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(createHospital).toHaveBeenCalledWith({ name: 'New Hospital' });
     expect(nurseModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'nurse-id-1',
-      {
-        firstName: 'Elvin',
-        patient: 'p-updated',
-        hospitals: 'h-created',
-      },
-      { new: true },
+      expect.objectContaining({
+        $set: {
+          firstName: 'Elvin',
+          patient: 'p-updated',
+          hospitals: 'h-created',
+        },
+      }),
+      { returnDocument: 'after', strict: false },
     );
     expect(response).toEqual({ id: 'n-updated' });
+  });
+
+  it('adds relationName for ObjectId changes in audit changedFields', async () => {
+    const previousOrderId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1001');
+    const nextOrderId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1002');
+
+    const orderStatusHistoryModel = {
+      schema: {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('order', {
+            options: { ref: 'Orders' },
+          });
+          callback('statusLabel', {
+            options: {},
+          });
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'h1',
+            order: previousOrderId,
+            statusLabel: 'pending',
+          }),
+        }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'h1',
+            order: nextOrderId,
+            statusLabel: 'approved',
+          }),
+        }),
+      }),
+    };
+
+    const service = new FormQueryService(
+      {
+        resolveModel: jest.fn().mockReturnValue(orderStatusHistoryModel),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.update('orderStatusHistory', {
+      id: 'h1',
+      order: nextOrderId,
+      statusLabel: 'approved',
+    });
+
+    const updateCallArgs = orderStatusHistoryModel.findByIdAndUpdate.mock
+      .calls[0] as [string, Record<string, unknown>, Record<string, unknown>];
+
+    expect(updateCallArgs[0]).toBe('h1');
+    expect(updateCallArgs[2]).toEqual({
+      returnDocument: 'after',
+      strict: false,
+    });
+
+    const updatePayload = updateCallArgs[1];
+    const pushPayload = updatePayload.$push as
+      | {
+          audit?: {
+            changedFields?: unknown[];
+          };
+        }
+      | undefined;
+    const changedFields = pushPayload?.audit?.changedFields;
+
+    expect(changedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'order',
+          relationName: 'Orders',
+          from: previousOrderId.toHexString(),
+          to: nextOrderId.toHexString(),
+        }),
+        expect.objectContaining({
+          path: 'statusLabel',
+          from: 'pending',
+          to: 'approved',
+        }),
+      ]),
+    );
+  });
+
+  it('adds relationName for ObjectId array relation changes in audit changedFields', async () => {
+    const previousProductId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1101');
+    const nextProductId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1102');
+
+    const ordersModel = {
+      schema: {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('orderProducts', {
+            caster: { options: { ref: 'OrderProducts' } },
+          });
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'o1',
+            orderProducts: [previousProductId],
+          }),
+        }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'o1',
+            orderProducts: [previousProductId, nextProductId],
+          }),
+        }),
+      }),
+    };
+
+    const service = new FormQueryService(
+      {
+        resolveModel: jest.fn().mockReturnValue(ordersModel),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.update('orders', {
+      id: 'o1',
+      orderProducts: [nextProductId],
+    });
+
+    const updateCallArgs = ordersModel.findByIdAndUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
+    const updatePayload = updateCallArgs[1];
+    const pushPayload = updatePayload.$push as
+      | {
+          audit?: {
+            changedFields?: unknown[];
+          };
+        }
+      | undefined;
+    const changedFields = pushPayload?.audit?.changedFields;
+
+    expect(changedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'orderProducts',
+          relationName: 'OrderProducts',
+        }),
+      ]),
+    );
   });
 
   it('creates subform record with parent_id when payload contains subform key', async () => {
@@ -793,11 +1197,13 @@ describe('FormQueryService', () => {
     });
     expect(customersModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'c1',
-      {
-        education: ['edu-old-1', 'edu-created-1'],
-        multi: true,
-      },
-      { new: true },
+      expect.objectContaining({
+        $set: {
+          education: ['edu-old-1', 'edu-created-1'],
+          multi: true,
+        },
+      }),
+      { returnDocument: 'after', strict: false },
     );
     expect(response).toEqual({
       id: 'c1',
@@ -884,16 +1290,18 @@ describe('FormQueryService', () => {
         year: '2021',
         country: 'PK',
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(educationModel.create).not.toHaveBeenCalled();
     expect(customersModel.findByIdAndUpdate).toHaveBeenCalledWith(
       'c1',
-      {
-        education: ['edu-existing-1'],
-        multi: true,
-      },
-      { new: true },
+      expect.objectContaining({
+        $set: {
+          education: ['edu-existing-1'],
+          multi: true,
+        },
+      }),
+      { returnDocument: 'after', strict: false },
     );
     expect(response).toEqual({
       id: 'c1',

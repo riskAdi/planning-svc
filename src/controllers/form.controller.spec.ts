@@ -7,6 +7,7 @@ describe('FormController', () => {
   let controller: FormController;
   const formQueryService = {
     find: jest.fn(),
+    findAuditById: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
   };
@@ -109,6 +110,24 @@ describe('FormController', () => {
         id: 'n1',
         firstName: 'Elvin',
       },
+      'nurse',
+    );
+  });
+
+  it('delegates audit-by-id request with formName and id', async () => {
+    const expectedResponse = {
+      id: 'order-1',
+      audit: [{ changedAt: '2026-08-09T00:00:00.000Z' }],
+    };
+    formQueryService.findAuditById.mockResolvedValue(expectedResponse);
+
+    await expect(
+      controller.getFormAuditDataById('orders', 'order-1'),
+    ).resolves.toEqual(expectedResponse);
+
+    expect(formQueryService.findAuditById).toHaveBeenCalledWith(
+      'orders',
+      'order-1',
       'nurse',
     );
   });

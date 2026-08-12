@@ -6,6 +6,7 @@ import {
   type FormModelDefinition,
   type FormModelRegistry,
 } from '../form-model.registry';
+import { excludeAuditFieldsFromResponse } from '../utils/response-sanitizer.util';
 import { QueryBuilderService } from './query-builder.service';
 import { RelationResolverService } from './relation-resolver.service';
 
@@ -35,7 +36,7 @@ export class FormService {
     ).exec();
 
     return {
-      data: documents,
+      data: excludeAuditFieldsFromResponse(documents),
       meta: {
         formName,
         modelName: definition.modelName,
@@ -67,7 +68,7 @@ export class FormService {
     }
 
     return {
-      data: document,
+      data: excludeAuditFieldsFromResponse(document),
       meta: {
         formName,
         modelName: definition.modelName,
