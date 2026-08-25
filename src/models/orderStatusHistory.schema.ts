@@ -76,9 +76,29 @@ function toIdString(value: unknown): string | null {
   return null;
 }
 
+function toObjectId(value: unknown): mongoose.Types.ObjectId | null {
+  const objectIdLike = toObjectIdLike(value);
+  if (!objectIdLike) {
+    return null;
+  }
+
+  if (objectIdLike instanceof mongoose.Types.ObjectId) {
+    return objectIdLike;
+  }
+
+  if (
+    typeof objectIdLike === 'string' &&
+    mongoose.isValidObjectId(objectIdLike)
+  ) {
+    return new mongoose.Types.ObjectId(objectIdLike);
+  }
+
+  return null;
+}
+
 OrderStatusHistorySchema.post('save', async function afterSave(doc) {
-  const orderId = toObjectIdLike(doc.order);
-  const statusId = toObjectIdLike(doc.status);
+  const orderId = toObjectId(doc.order);
+  const statusId = toObjectId(doc.status);
 
   if (!orderId || !statusId) {
     return;

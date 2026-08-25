@@ -11,7 +11,11 @@ import type { FormModelDefinition } from '../form-model.registry';
 import { excludeAuditFieldsFromResponse } from '../utils/response-sanitizer.util';
 
 import { FormModelRegistryService } from './form-model-registry.service';
-import { QueryBuilderService } from './query-builder.service';
+import {
+  QueryBuilderService,
+  type SearchOperator,
+  type SearchQuery,
+} from './query-builder.service';
 import { RelationResolverService } from './relation-resolver.service';
 
 type Payload = Record<string, unknown>;
@@ -34,8 +38,23 @@ type PaginatedResult = {
   };
 };
 
+type SortOrder = 'ascend' | 'descend';
+
+type SorterQuery = {
+  field: string;
+  order: SortOrder;
+};
+
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 20;
+const REFERENCE_SEARCH_FIELDS = [
+  'firstName',
+  'lastName',
+  'title',
+  'label',
+  'name',
+  'city',
+] as const;
 const PAYLOAD_SYSTEM_FIELDS = new Set([
   'id',
   '_id',
@@ -181,6 +200,10 @@ function getRelationInfo(model: Model<any>): RelationInfo[] {
   const relations: RelationInfo[] = [];
   const schema = getModelSchema(model);
 
+  if (typeof schema.eachPath !== 'function') {
+    return relations;
+  }
+
   schema.eachPath((pathName: string, schemaType: SchemaType) => {
     const st = schemaType as unknown as {
       options?: Record<string, unknown>;
@@ -251,30 +274,6 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function getSchemaPathInstance(
-  model: Model<any>,
-  pathName: string,
-): string | undefined {
-  const schema = getModelSchema(model) as Schema & {
-    path?: (name: string) => { instance?: string } | undefined;
-    paths?: Record<string, { instance?: string }>;
-  };
-
-  const fromPaths = schema.paths?.[pathName]?.instance;
-  if (typeof fromPaths === 'string' && fromPaths.trim() !== '') {
-    return fromPaths;
-  }
-
-  if (typeof schema.path === 'function') {
-    const fromPathFn = schema.path(pathName)?.instance;
-    if (typeof fromPathFn === 'string' && fromPathFn.trim() !== '') {
-      return fromPathFn;
-    }
-  }
-
-  return undefined;
-}
-
 function toTimestamp(value: unknown): number {
   if (value instanceof Date) {
     return value.getTime();
@@ -288,6 +287,21 @@ function toTimestamp(value: unknown): number {
   return Number.NEGATIVE_INFINITY;
 }
 
+function toValidDate(value: unknown): Date | null {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
 function sortAuditByChangedAtDesc(entries: unknown[]): unknown[] {
   return [...entries].sort((left, right) => {
     const leftChangedAt =
@@ -299,54 +313,6 @@ function sortAuditByChangedAtDesc(entries: unknown[]): unknown[] {
 
     return toTimestamp(rightChangedAt) - toTimestamp(leftChangedAt);
   });
-}
-
-function toOrRegexFilter(
-  model: Model<any>,
-  matchedFilter: Record<string, unknown>,
-): Record<string, unknown> {
-  const entries = Object.entries(matchedFilter);
-  if (entries.length === 0) {
-    return {};
-  }
-
-  const andClauses: Record<string, unknown> = {};
-  const orClauses: Record<string, unknown>[] = [];
-
-  for (const [key, value] of entries) {
-    const schemaInstance = getSchemaPathInstance(model, key)?.toLowerCase();
-    const isStringPath = !schemaInstance || schemaInstance === 'string';
-
-    if (typeof value === 'string' && isStringPath) {
-      const wildcardPattern = value
-        .split('*')
-        .map((segment) => escapeRegex(segment))
-        .join('.*');
-
-      orClauses.push({
-        [key]: {
-          $regex: wildcardPattern,
-          $options: 'i',
-        },
-      });
-      continue;
-    }
-
-    andClauses[key] = value;
-  }
-
-  if (orClauses.length === 0) {
-    return andClauses;
-  }
-
-  if (Object.keys(andClauses).length === 0) {
-    return { $or: orClauses };
-  }
-
-  return {
-    ...andClauses,
-    $or: orClauses,
-  };
 }
 
 function toIdString(value: unknown): string | null {
@@ -369,6 +335,175 @@ function toIdString(value: unknown): string | null {
   }
 
   return null;
+}
+
+function isHexObjectId(value: string): boolean {
+  return /^[a-fA-F0-9]{24}$/.test(value);
+}
+
+type SearchFieldKind = 'string' | 'number' | 'date' | 'array' | 'unknown';
+
+function getSchemaFieldKind(
+  model: Model<any>,
+  pathName: string,
+): SearchFieldKind {
+  const schema = getModelSchema(model) as Schema & {
+    path?: (name: string) => { instance?: string } | undefined;
+    paths?: Record<string, { instance?: string }>;
+  };
+
+  const instance =
+    schema.paths?.[pathName]?.instance ?? schema.path?.(pathName)?.instance;
+  const normalizedInstance = instance?.toLowerCase();
+
+  if (!normalizedInstance) {
+    return 'unknown';
+  }
+
+  if (normalizedInstance === 'array') {
+    return 'array';
+  }
+
+  if (normalizedInstance === 'date') {
+    return 'date';
+  }
+
+  if (
+    normalizedInstance === 'number' ||
+    normalizedInstance === 'decimal128' ||
+    normalizedInstance === 'int32' ||
+    normalizedInstance === 'double'
+  ) {
+    return 'number';
+  }
+
+  if (normalizedInstance === 'string') {
+    return 'string';
+  }
+
+  return 'unknown';
+}
+
+function isObjectIdSchemaField(model: Model<any>, pathName: string): boolean {
+  const schema = getModelSchema(model) as Schema & {
+    path?: (name: string) => { instance?: string } | undefined;
+    paths?: Record<string, { instance?: string }>;
+  };
+
+  const instance =
+    schema.paths?.[pathName]?.instance ?? schema.path?.(pathName)?.instance;
+
+  return instance?.toLowerCase() === 'objectid';
+}
+
+function toStrictObjectId(
+  value: unknown,
+  fieldName: string,
+  operator: SearchOperator,
+): Types.ObjectId {
+  if (value instanceof Types.ObjectId) {
+    return value;
+  }
+
+  if (typeof value === 'string' && isHexObjectId(value)) {
+    return new Types.ObjectId(value);
+  }
+
+  throw new BadRequestException(
+    `search.${fieldName}.value must be a valid ObjectId for operator "${operator}"`,
+  );
+}
+
+function toStrictObjectIdArray(
+  values: unknown[],
+  fieldName: string,
+  operator: SearchOperator,
+): Types.ObjectId[] {
+  return values.map((value) => toStrictObjectId(value, fieldName, operator));
+}
+
+function assertOperatorAllowedForKind(
+  fieldName: string,
+  operator: SearchOperator,
+  kind: SearchFieldKind,
+): void {
+  const operatorMap: Record<
+    Exclude<SearchFieldKind, 'unknown'>,
+    SearchOperator[]
+  > = {
+    string: [
+      'equals',
+      'notEquals',
+      'contains',
+      'notContains',
+      'startsWith',
+      'endsWith',
+      'isEmpty',
+      'isNotEmpty',
+    ],
+    number: [
+      'equals',
+      'notEquals',
+      'gt',
+      'gte',
+      'lt',
+      'lte',
+      'between',
+      'in',
+      'notIn',
+    ],
+    date: [
+      'equals',
+      'before',
+      'after',
+      'beforeOrEqual',
+      'afterOrEqual',
+      'between',
+    ],
+    array: ['equals', 'notEquals', 'in', 'notIn', 'isEmpty', 'isNotEmpty'],
+  };
+
+  if (kind === 'unknown') {
+    return;
+  }
+
+  const allowedOperators = operatorMap[kind];
+  if (!allowedOperators.includes(operator)) {
+    throw new BadRequestException(
+      `search.${fieldName}.operator "${operator}" is not supported for ${kind} fields`,
+    );
+  }
+}
+
+function toValidNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function buildRegexFilter(
+  value: string,
+  mode: 'contains' | 'startsWith' | 'endsWith',
+) {
+  const escaped = escapeRegex(value);
+  if (mode === 'startsWith') {
+    return { $regex: `^${escaped}`, $options: 'i' };
+  }
+
+  if (mode === 'endsWith') {
+    return { $regex: `${escaped}$`, $options: 'i' };
+  }
+
+  return { $regex: escaped, $options: 'i' };
 }
 
 function normalizeRole(role: string | undefined): string | undefined {
@@ -415,6 +550,37 @@ function getModelPermissions(model: Model<any>): PermissionMap | undefined {
   const schema = getModelSchema(model) as SchemaWithPermissions;
 
   return schema.formPermissions;
+}
+
+function resolveSortableField(model: Model<any>, field: string): string | null {
+  const normalizedField = field.trim() === 'id' ? '_id' : field.trim();
+  if (!normalizedField) {
+    return null;
+  }
+
+  const schema = getModelSchema(model);
+  const allowedPaths = new Set<string>();
+
+  const schemaPaths = schema.paths as Record<string, unknown> | undefined;
+  if (schemaPaths && typeof schemaPaths === 'object') {
+    Object.keys(schemaPaths).forEach((pathName) => allowedPaths.add(pathName));
+  }
+
+  if (allowedPaths.size === 0 && typeof schema.eachPath === 'function') {
+    schema.eachPath((pathName: string) => {
+      allowedPaths.add(pathName);
+    });
+  }
+
+  if (allowedPaths.size === 0) {
+    return normalizedField;
+  }
+
+  return allowedPaths.has(normalizedField) ? normalizedField : null;
+}
+
+function toMongoSortOrder(order: SortOrder): 1 | -1 {
+  return order === 'ascend' ? 1 : -1;
 }
 
 type AuditChange = {
@@ -594,20 +760,33 @@ export class FormQueryService {
     page = DEFAULT_PAGE,
     limit = DEFAULT_LIMIT,
     userRole?: string,
+    sorter?: SorterQuery,
   ): Promise<PaginatedResult> {
     const model = this.registry.resolveModel(formName);
     const role = normalizeRole(userRole);
     const permissions = getModelPermissions(model);
     this.assertFormPermission(formName, permissions, 'read', role);
 
-    const parsedFilter = this.queryBuilder.parseSearch(search);
-    const matchedFilter = toSchemaMatchedFilter(model, parsedFilter);
-    const filter = toOrRegexFilter(model, matchedFilter);
+    const parsedSearch = this.queryBuilder.parseSearch(search);
+    const filter = await this.buildSearchFilter(model, parsedSearch);
     const includes = this.relations.resolveIncludePaths(model, include);
     const skip = (page - 1) * limit;
 
     const query = model.find(filter);
     this.relations.applyPopulate(query, model, include);
+
+    if (sorter) {
+      const sortField = resolveSortableField(model, sorter.field);
+      if (!sortField) {
+        throw new BadRequestException(
+          `sorter.field "${sorter.field}" is not a valid field for form "${formName}".`,
+        );
+      }
+
+      this.assertReadableSortField(formName, sortField, permissions, role);
+      query.sort({ [sortField]: toMongoSortOrder(sorter.order) });
+    }
+
     query.skip(skip).limit(limit);
 
     const [data, total] = await Promise.all([
@@ -634,6 +813,326 @@ export class FormQueryService {
         include: includes,
       },
     };
+  }
+
+  private async buildSearchFilter(
+    model: Model<any>,
+    search: SearchQuery,
+  ): Promise<Record<string, unknown>> {
+    const matchedSearch = toSchemaMatchedFilter(model, search) as SearchQuery;
+
+    const nextFilter: Record<string, unknown> = {};
+
+    const relationsByPath = new Map(
+      getRelationInfo(model).map((relation) => [relation.path, relation]),
+    );
+
+    for (const [fieldName, rawCondition] of Object.entries(matchedSearch)) {
+      if (!isPlainObject(rawCondition)) {
+        continue;
+      }
+
+      const condition = rawCondition;
+      const operator = condition.operator;
+      const kind = getSchemaFieldKind(model, fieldName);
+      const isRelationField = relationsByPath.has(fieldName);
+      const isObjectIdField = isObjectIdSchemaField(model, fieldName);
+      const shouldNormalizeObjectIdValues = isRelationField || isObjectIdField;
+      assertOperatorAllowedForKind(fieldName, operator, kind);
+
+      if (operator === 'isEmpty') {
+        if (kind === 'array') {
+          nextFilter[fieldName] = { $size: 0 };
+          continue;
+        }
+
+        nextFilter[fieldName] = { $in: [null, ''] };
+        continue;
+      }
+
+      if (operator === 'isNotEmpty') {
+        if (kind === 'array') {
+          nextFilter[fieldName] = { $exists: true, $ne: [] };
+          continue;
+        }
+
+        nextFilter[fieldName] = { $nin: [null, ''] };
+        continue;
+      }
+
+      if (operator === 'contains') {
+        if (
+          typeof condition.value !== 'string' ||
+          condition.value.trim() === ''
+        ) {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be a non-empty string for operator "contains"`,
+          );
+        }
+
+        const containsValue = condition.value.trim();
+        const relation = relationsByPath.get(fieldName);
+        if (relation) {
+          if (isHexObjectId(containsValue)) {
+            nextFilter[fieldName] = new Types.ObjectId(containsValue);
+            continue;
+          }
+
+          const relationIds = await this.findRelationIdsByText(
+            relation.refModelName,
+            containsValue,
+          );
+
+          nextFilter[fieldName] = {
+            $in: relationIds,
+          };
+          continue;
+        }
+
+        nextFilter[fieldName] = {
+          ...buildRegexFilter(containsValue, 'contains'),
+        };
+        continue;
+      }
+
+      if (operator === 'notContains') {
+        if (typeof condition.value !== 'string') {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be a string for operator "notContains"`,
+          );
+        }
+
+        nextFilter[fieldName] = {
+          $not: buildRegexFilter(condition.value, 'contains'),
+        };
+        continue;
+      }
+
+      if (operator === 'startsWith') {
+        if (typeof condition.value !== 'string') {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be a string for operator "startsWith"`,
+          );
+        }
+
+        nextFilter[fieldName] = buildRegexFilter(condition.value, 'startsWith');
+        continue;
+      }
+
+      if (operator === 'endsWith') {
+        if (typeof condition.value !== 'string') {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be a string for operator "endsWith"`,
+          );
+        }
+
+        nextFilter[fieldName] = buildRegexFilter(condition.value, 'endsWith');
+        continue;
+      }
+
+      if (
+        operator === 'gt' ||
+        operator === 'gte' ||
+        operator === 'lt' ||
+        operator === 'lte'
+      ) {
+        const scalarValue =
+          kind === 'date'
+            ? toValidDate(condition.value)
+            : toValidNumber(condition.value);
+        if (scalarValue === null) {
+          throw new BadRequestException(
+            `search.${fieldName}.value is invalid for operator "${operator}"`,
+          );
+        }
+
+        const mongoOperator =
+          operator === 'gt'
+            ? '$gt'
+            : operator === 'gte'
+              ? '$gte'
+              : operator === 'lt'
+                ? '$lt'
+                : '$lte';
+
+        nextFilter[fieldName] = {
+          [mongoOperator]: scalarValue,
+        };
+        continue;
+      }
+
+      if (
+        operator === 'before' ||
+        operator === 'after' ||
+        operator === 'beforeOrEqual' ||
+        operator === 'afterOrEqual'
+      ) {
+        const dateValue = toValidDate(condition.value);
+        if (!dateValue) {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be a valid date for operator "${operator}"`,
+          );
+        }
+
+        const mongoOperator =
+          operator === 'before'
+            ? '$lt'
+            : operator === 'after'
+              ? '$gt'
+              : operator === 'beforeOrEqual'
+                ? '$lte'
+                : '$gte';
+
+        nextFilter[fieldName] = {
+          [mongoOperator]: dateValue,
+        };
+        continue;
+      }
+
+      if (operator === 'between') {
+        if (!Array.isArray(condition.value) || condition.value.length !== 2) {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be an array of two values for operator "between"`,
+          );
+        }
+
+        const betweenValues = condition.value as unknown[];
+        const rawStart = betweenValues[0];
+        const rawEnd = betweenValues[1];
+        const start =
+          kind === 'date' ? toValidDate(rawStart) : toValidNumber(rawStart);
+        const end =
+          kind === 'date' ? toValidDate(rawEnd) : toValidNumber(rawEnd);
+        if (start === null || end === null) {
+          throw new BadRequestException(
+            `search.${fieldName}.value contains invalid values for operator "between"`,
+          );
+        }
+
+        nextFilter[fieldName] = {
+          $gte: start,
+          $lte: end,
+        };
+        continue;
+      }
+
+      if (operator === 'in') {
+        if (!Array.isArray(condition.value)) {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be an array for operator "in"`,
+          );
+        }
+
+        if (shouldNormalizeObjectIdValues) {
+          nextFilter[fieldName] = {
+            $in: toStrictObjectIdArray(condition.value, fieldName, operator),
+          };
+          continue;
+        }
+
+        nextFilter[fieldName] = {
+          $in: condition.value,
+        };
+        continue;
+      }
+
+      if (operator === 'notIn') {
+        if (!Array.isArray(condition.value)) {
+          throw new BadRequestException(
+            `search.${fieldName}.value must be an array for operator "notIn"`,
+          );
+        }
+
+        if (shouldNormalizeObjectIdValues) {
+          nextFilter[fieldName] = {
+            $nin: toStrictObjectIdArray(condition.value, fieldName, operator),
+          };
+          continue;
+        }
+
+        nextFilter[fieldName] = {
+          $nin: condition.value,
+        };
+        continue;
+      }
+
+      if (operator === 'notEquals') {
+        if (shouldNormalizeObjectIdValues) {
+          nextFilter[fieldName] = {
+            $ne: toStrictObjectId(condition.value, fieldName, operator),
+          };
+          continue;
+        }
+
+        nextFilter[fieldName] = {
+          $ne: condition.value,
+        };
+        continue;
+      }
+
+      if (operator === 'equals') {
+        if (shouldNormalizeObjectIdValues) {
+          nextFilter[fieldName] = toStrictObjectId(
+            condition.value,
+            fieldName,
+            operator,
+          );
+          continue;
+        }
+
+        nextFilter[fieldName] = condition.value;
+        continue;
+      }
+
+      nextFilter[fieldName] = condition.value;
+    }
+
+    return nextFilter;
+  }
+
+  private async findRelationIdsByText(
+    relationModelName: string,
+    text: string,
+  ): Promise<Array<string | Types.ObjectId>> {
+    try {
+      const relationModel = this.registry.resolveModel(relationModelName);
+      const relationSchema = getModelSchema(relationModel);
+      const schemaPaths = relationSchema.paths as
+        | Record<string, unknown>
+        | undefined;
+
+      const searchableFields = REFERENCE_SEARCH_FIELDS.filter(
+        (fieldName) => !!schemaPaths?.[fieldName],
+      );
+
+      if (searchableFields.length === 0) {
+        return [];
+      }
+
+      const matchedRecords = (await relationModel
+        .find({
+          $or: searchableFields.map((fieldName) => ({
+            [fieldName]: {
+              $regex: escapeRegex(text),
+              $options: 'i',
+            },
+          })),
+        })
+        .select('_id')
+        .limit(500)
+        .lean()
+        .exec()) as unknown[];
+
+      return matchedRecords
+        .map((record) => getObjectIdLike(record))
+        .filter(
+          (id): id is string | Types.ObjectId =>
+            id instanceof Types.ObjectId ||
+            (typeof id === 'string' && id.trim() !== ''),
+        );
+    } catch {
+      return [];
+    }
   }
 
   async findById(
@@ -1301,5 +1800,30 @@ export class FormQueryService {
     }
 
     return filtered;
+  }
+
+  private assertReadableSortField(
+    formName: string,
+    fieldName: string,
+    permissions: PermissionMap | undefined,
+    role: string | undefined,
+  ) {
+    if (READ_ALWAYS_ALLOWED_FIELDS.has(fieldName)) {
+      return;
+    }
+
+    const fieldAccess = permissions?.fields?.[fieldName];
+    if (!fieldAccess) {
+      return;
+    }
+
+    const allowedRoles = toAllowedRoles(fieldAccess, 'read');
+    if (isRoleAllowed(role, allowedRoles)) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      `Role "${role ?? 'unknown'}" is not authorized to sort by field "${fieldName}" on form "${formName}".`,
+    );
   }
 }
