@@ -83,7 +83,12 @@ describe('FormQueryService', () => {
     };
 
     const queryBuilder = {
-      parseSearch: jest.fn().mockReturnValue({ gender: 'male' }),
+      parseSearch: jest.fn().mockReturnValue({
+        gender: {
+          operator: 'contains',
+          value: 'male',
+        },
+      }),
     };
 
     const relations = {
@@ -108,14 +113,10 @@ describe('FormQueryService', () => {
     expect(skip).toHaveBeenCalledWith(5);
     expect(limit).toHaveBeenCalledWith(5);
     expect(nurseModel.countDocuments).toHaveBeenCalledWith({
-      $or: [
-        {
-          gender: {
-            $regex: 'male',
-            $options: 'i',
-          },
-        },
-      ],
+      gender: {
+        $regex: 'male',
+        $options: 'i',
+      },
     });
     expect(result).toEqual({
       data: [{ id: 'n1' }],
@@ -128,6 +129,166 @@ describe('FormQueryService', () => {
         include: ['patient', 'hospitals'],
       },
     });
+  });
+
+  it('applies sorter when field is valid and role can read it', async () => {
+    const exec = jest.fn().mockResolvedValue([{ _id: 'p1', name: 'Alpha' }]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const sort = jest.fn().mockReturnValue({ skip, limit, lean });
+    const query = {
+      sort,
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const productsModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(1) }),
+      schema: {
+        paths: {
+          _id: {},
+          name: {},
+        },
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { read: ['nurse'] },
+          fields: {
+            name: { read: ['nurse'] },
+          },
+        },
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(productsModel) } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.find(
+      'products',
+      undefined,
+      undefined,
+      1,
+      20,
+      'nurse',
+      { field: 'name', order: 'ascend' },
+    );
+
+    expect(sort).toHaveBeenCalledWith({ name: 1 });
+    expect(result.data).toEqual([{ id: 'p1', name: 'Alpha' }]);
+  });
+
+  it('throws bad request when sorter field is not in schema', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const sort = jest.fn().mockReturnValue({ skip, limit, lean });
+    const query = {
+      sort,
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const productsModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          _id: {},
+          name: {},
+        },
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { read: ['nurse'] },
+        },
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(productsModel) } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await expect(
+      service.find('products', undefined, undefined, 1, 20, 'nurse', {
+        field: 'unknownField',
+        order: 'ascend',
+      }),
+    ).rejects.toThrow('sorter.field "unknownField" is not a valid field');
+
+    expect(sort).not.toHaveBeenCalled();
+  });
+
+  it('throws forbidden when role cannot sort by restricted field', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const sort = jest.fn().mockReturnValue({ skip, limit, lean });
+    const query = {
+      sort,
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const productsModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          _id: {},
+          costPrice: {},
+        },
+        eachPath: jest.fn(),
+        formPermissions: {
+          form: { read: ['nurse', 'patient'] },
+          fields: {
+            costPrice: { read: ['nurse'] },
+          },
+        },
+      },
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(productsModel) } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await expect(
+      service.find('products', undefined, undefined, 1, 20, 'patient', {
+        field: 'costPrice',
+        order: 'ascend',
+      }),
+    ).rejects.toThrow('is not authorized to sort by field "costPrice"');
+
+    expect(sort).not.toHaveBeenCalled();
   });
 
   it('defaults to all relations when include is omitted', async () => {
@@ -175,7 +336,7 @@ describe('FormQueryService', () => {
     expect(result.meta.include).toEqual(['hospital', 'nurse']);
   });
 
-  it('uses only schema-defined keys and applies OR wildcard regex search', async () => {
+  it('uses only schema-defined keys with contains operator', async () => {
     const exec = jest.fn().mockResolvedValue([]);
     const lean = jest.fn().mockReturnValue({ exec });
     const limit = jest.fn().mockReturnValue({ lean });
@@ -207,10 +368,22 @@ describe('FormQueryService', () => {
       { resolveModel: jest.fn().mockReturnValue(doctorsModel) } as never,
       {
         parseSearch: jest.fn().mockReturnValue({
-          first_name: 'sdf',
-          last_name: 'sdf',
-          phone_number: 'sdf',
-          invalid_key: 'ignore-me',
+          first_name: {
+            operator: 'contains',
+            value: 'sdf',
+          },
+          last_name: {
+            operator: 'contains',
+            value: 'sdf',
+          },
+          phone_number: {
+            operator: 'contains',
+            value: 'sdf',
+          },
+          invalid_key: {
+            operator: 'contains',
+            value: 'ignore-me',
+          },
         }),
       } as never,
       {
@@ -226,52 +399,36 @@ describe('FormQueryService', () => {
     );
 
     expect(doctorsModel.find).toHaveBeenCalledWith({
-      $or: [
-        {
-          first_name: {
-            $regex: 'sdf',
-            $options: 'i',
-          },
-        },
-        {
-          last_name: {
-            $regex: 'sdf',
-            $options: 'i',
-          },
-        },
-        {
-          phone_number: {
-            $regex: 'sdf',
-            $options: 'i',
-          },
-        },
-      ],
+      first_name: {
+        $regex: 'sdf',
+        $options: 'i',
+      },
+      last_name: {
+        $regex: 'sdf',
+        $options: 'i',
+      },
+      phone_number: {
+        $regex: 'sdf',
+        $options: 'i',
+      },
     });
     expect(doctorsModel.countDocuments).toHaveBeenCalledWith({
-      $or: [
-        {
-          first_name: {
-            $regex: 'sdf',
-            $options: 'i',
-          },
-        },
-        {
-          last_name: {
-            $regex: 'sdf',
-            $options: 'i',
-          },
-        },
-        {
-          phone_number: {
-            $regex: 'sdf',
-            $options: 'i',
-          },
-        },
-      ],
+      first_name: {
+        $regex: 'sdf',
+        $options: 'i',
+      },
+      last_name: {
+        $regex: 'sdf',
+        $options: 'i',
+      },
+      phone_number: {
+        $regex: 'sdf',
+        $options: 'i',
+      },
     });
   });
 
-  it('supports asterisk wildcard in search values', async () => {
+  it('treats special characters as literal in contains search', async () => {
     const exec = jest.fn().mockResolvedValue([]);
     const lean = jest.fn().mockReturnValue({ exec });
     const limit = jest.fn().mockReturnValue({ lean });
@@ -300,7 +457,10 @@ describe('FormQueryService', () => {
       { resolveModel: jest.fn().mockReturnValue(doctorsModel) } as never,
       {
         parseSearch: jest.fn().mockReturnValue({
-          first_name: 'El*in',
+          first_name: {
+            operator: 'contains',
+            value: 'El*in',
+          },
         }),
       } as never,
       {
@@ -312,18 +472,133 @@ describe('FormQueryService', () => {
     await service.find('doctors', '{"first_name":"El*in"}', undefined);
 
     expect(doctorsModel.find).toHaveBeenCalledWith({
-      $or: [
-        {
-          first_name: {
-            $regex: 'El.*in',
-            $options: 'i',
-          },
-        },
-      ],
+      first_name: {
+        $regex: 'El\\*in',
+        $options: 'i',
+      },
     });
   });
 
-  it('applies mongo object filters as AND and string filters as OR', async () => {
+  it('applies date array search as between filter for date fields', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          createdAt: { instance: 'Date' },
+        },
+        eachPath: jest.fn(),
+      },
+    };
+
+    const start = '2026-07-01 00:00';
+    const end = '2026-07-31 00:00';
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(ordersModel) } as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          createdAt: {
+            operator: 'between',
+            value: [start, end],
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orders',
+      `{"createdAt":["${start}","${end}"]}`,
+      undefined,
+    );
+
+    expect(ordersModel.find).toHaveBeenCalledWith({
+      createdAt: {
+        $gte: new Date(start),
+        $lte: new Date(end),
+      },
+    });
+    expect(ordersModel.countDocuments).toHaveBeenCalledWith({
+      createdAt: {
+        $gte: new Date(start),
+        $lte: new Date(end),
+      },
+    });
+  });
+
+  it('rejects between operator for string fields', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          deliveryWindow: { instance: 'String' },
+        },
+        eachPath: jest.fn(),
+      },
+    };
+
+    const start = '2026-07-01 00:00';
+    const end = '2026-07-31 00:00';
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(ordersModel) } as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          deliveryWindow: {
+            operator: 'between',
+            value: [start, end],
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await expect(
+      service.find(
+        'orders',
+        `{"deliveryWindow":["${start}","${end}"]}`,
+        undefined,
+      ),
+    ).rejects.toThrow(
+      'search.deliveryWindow.operator "between" is not supported for string fields',
+    );
+  });
+
+  it('applies operator-based filters as direct mongo clauses', async () => {
     const exec = jest.fn().mockResolvedValue([]);
     const lean = jest.fn().mockReturnValue({ exec });
     const limit = jest.fn().mockReturnValue({ lean });
@@ -353,9 +628,18 @@ describe('FormQueryService', () => {
       { resolveModel: jest.fn().mockReturnValue(ordersModel) } as never,
       {
         parseSearch: jest.fn().mockReturnValue({
-          orderId: { $in: ['ORD-1001', 'ORD-1002'] },
-          customerName: 'john',
-          invalid_key: { $exists: true },
+          orderId: {
+            operator: 'in',
+            value: ['ORD-1001', 'ORD-1002'],
+          },
+          customerName: {
+            operator: 'contains',
+            value: 'john',
+          },
+          invalid_key: {
+            operator: 'equals',
+            value: true,
+          },
         }),
       } as never,
       {
@@ -368,25 +652,17 @@ describe('FormQueryService', () => {
 
     expect(ordersModel.find).toHaveBeenCalledWith({
       orderId: { $in: ['ORD-1001', 'ORD-1002'] },
-      $or: [
-        {
-          customerName: {
-            $regex: 'john',
-            $options: 'i',
-          },
-        },
-      ],
+      customerName: {
+        $regex: 'john',
+        $options: 'i',
+      },
     });
     expect(ordersModel.countDocuments).toHaveBeenCalledWith({
       orderId: { $in: ['ORD-1001', 'ORD-1002'] },
-      $or: [
-        {
-          customerName: {
-            $regex: 'john',
-            $options: 'i',
-          },
-        },
-      ],
+      customerName: {
+        $regex: 'john',
+        $options: 'i',
+      },
     });
   });
 
@@ -546,7 +822,10 @@ describe('FormQueryService', () => {
       } as never,
       {
         parseSearch: jest.fn().mockReturnValue({
-          order: '6a63b2aae93bdf502531c928',
+          order: {
+            operator: 'equals',
+            value: '6a63b2aae93bdf502531c928',
+          },
         }),
       } as never,
       {
@@ -561,12 +840,606 @@ describe('FormQueryService', () => {
       undefined,
     );
 
-    expect(orderStatusHistoryModel.find).toHaveBeenCalledWith({
-      order: '6a63b2aae93bdf502531c928',
+    const expectedOrderId = '6a63b2aae93bdf502531c928';
+    const findCalls = orderStatusHistoryModel.find.mock.calls as unknown[][];
+    const countCalls = orderStatusHistoryModel.countDocuments.mock
+      .calls as unknown[][];
+
+    const findFilter = (findCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+    const countFilter = (countCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+
+    expect(findFilter.order).toBeInstanceOf(Types.ObjectId);
+    expect(countFilter.order).toBeInstanceOf(Types.ObjectId);
+    expect((findFilter.order as Types.ObjectId).toHexString()).toBe(
+      expectedOrderId,
+    );
+    expect((countFilter.order as Types.ObjectId).toHexString()).toBe(
+      expectedOrderId,
+    );
+  });
+
+  it('resolves relation ObjectId search text to matching related ids', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          customer: { instance: 'ObjectId' },
+        },
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('customer', {
+            options: { ref: 'Customers' },
+          });
+        },
+      },
+    };
+
+    const customersFindExec = jest.fn().mockResolvedValue([{ _id: 'c1' }]);
+    const customersFindLean = jest
+      .fn()
+      .mockReturnValue({ exec: customersFindExec });
+    const customersFindLimit = jest
+      .fn()
+      .mockReturnValue({ lean: customersFindLean });
+    const customersFindSelect = jest
+      .fn()
+      .mockReturnValue({ limit: customersFindLimit });
+    const customersModel = {
+      schema: {
+        paths: {
+          firstName: { instance: 'String' },
+          lastName: { instance: 'String' },
+        },
+      },
+      find: jest.fn().mockReturnValue({ select: customersFindSelect }),
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') return ordersModel;
+        if (modelName === 'Customers') return customersModel;
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          customer: {
+            operator: 'contains',
+            value: 'dd',
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find('orders', '{"customer":"dd"}', undefined);
+
+    expect(customersModel.find).toHaveBeenCalledWith({
+      $or: [
+        {
+          firstName: {
+            $regex: 'dd',
+            $options: 'i',
+          },
+        },
+        {
+          lastName: {
+            $regex: 'dd',
+            $options: 'i',
+          },
+        },
+      ],
     });
-    expect(orderStatusHistoryModel.countDocuments).toHaveBeenCalledWith({
-      order: '6a63b2aae93bdf502531c928',
+    expect(ordersModel.find).toHaveBeenCalledWith({
+      customer: { $in: ['c1'] },
     });
+    expect(ordersModel.countDocuments).toHaveBeenCalledWith({
+      customer: { $in: ['c1'] },
+    });
+  });
+
+  it('combines relation contains and string contains as AND clauses', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          customer: { instance: 'ObjectId' },
+          discountCode: { instance: 'String' },
+        },
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('customer', {
+            options: { ref: 'Customers' },
+          });
+        },
+      },
+    };
+
+    const customersFindExec = jest.fn().mockResolvedValue([]);
+    const customersFindLean = jest
+      .fn()
+      .mockReturnValue({ exec: customersFindExec });
+    const customersFindLimit = jest
+      .fn()
+      .mockReturnValue({ lean: customersFindLean });
+    const customersFindSelect = jest
+      .fn()
+      .mockReturnValue({ limit: customersFindLimit });
+    const customersModel = {
+      schema: {
+        paths: {
+          firstName: { instance: 'String' },
+          lastName: { instance: 'String' },
+        },
+      },
+      find: jest.fn().mockReturnValue({ select: customersFindSelect }),
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') return ordersModel;
+        if (modelName === 'Customers') return customersModel;
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          customer: {
+            operator: 'contains',
+            value: '231',
+          },
+          discountCode: {
+            operator: 'contains',
+            value: '231',
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orders',
+      '{"customer":"231","discountCode":"231"}',
+      undefined,
+    );
+
+    expect(ordersModel.find).toHaveBeenCalledWith({
+      customer: { $in: [] },
+      discountCode: {
+        $regex: '231',
+        $options: 'i',
+      },
+    });
+    expect(ordersModel.countDocuments).toHaveBeenCalledWith({
+      customer: { $in: [] },
+      discountCode: {
+        $regex: '231',
+        $options: 'i',
+      },
+    });
+  });
+
+  it('maps relation in operator with multiple status ids into $in filter', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          status: { instance: 'ObjectId' },
+        },
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('status', {
+            options: { ref: 'OrderStatus' },
+          });
+        },
+      },
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') return ordersModel;
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const statusIdOne = '6a63cde5571a529c214a48ad';
+    const statusIdTwo = '6a63cde5571a529c214a48b3';
+
+    const service = new FormQueryService(
+      registry as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          status: {
+            operator: 'in',
+            value: [statusIdOne, statusIdTwo],
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orders',
+      `{"status":{"operator":"in","value":["${statusIdOne}","${statusIdTwo}"]}}`,
+      undefined,
+    );
+
+    const findCalls = ordersModel.find.mock.calls as unknown[][];
+    const findFilter = (findCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+    const statusFilter = findFilter.status as { $in?: unknown[] };
+    const inValues = Array.isArray(statusFilter.$in) ? statusFilter.$in : [];
+
+    const hasStatusOneObjectId = inValues.some(
+      (value) =>
+        value instanceof Types.ObjectId && value.toHexString() === statusIdOne,
+    );
+    const hasStatusTwoObjectId = inValues.some(
+      (value) =>
+        value instanceof Types.ObjectId && value.toHexString() === statusIdTwo,
+    );
+
+    expect(hasStatusOneObjectId).toBe(true);
+    expect(hasStatusTwoObjectId).toBe(true);
+  });
+
+  it('keeps valid ObjectId relation search as direct match', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          customer: { instance: 'ObjectId' },
+        },
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('customer', {
+            options: { ref: 'Customers' },
+          });
+        },
+      },
+    };
+
+    const customersModel = {
+      schema: {
+        paths: {
+          firstName: { instance: 'String' },
+        },
+      },
+      find: jest.fn(),
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') return ordersModel;
+        if (modelName === 'Customers') return customersModel;
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const service = new FormQueryService(
+      registry as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          customer: {
+            operator: 'contains',
+            value: '6a63b2aae93bdf502531c928',
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orders',
+      '{"customer":"6a63b2aae93bdf502531c928"}',
+      undefined,
+    );
+
+    expect(customersModel.find).not.toHaveBeenCalled();
+    const findCalls = ordersModel.find.mock.calls as unknown[][];
+    const findFilter = (findCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+    expect(findFilter.customer).toBeInstanceOf(Types.ObjectId);
+    expect((findFilter.customer as Types.ObjectId).toHexString()).toBe(
+      '6a63b2aae93bdf502531c928',
+    );
+  });
+
+  it('treats valid ObjectId search with AND when combined with text search', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          customer: { instance: 'ObjectId' },
+          discountCode: { instance: 'String' },
+        },
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('customer', {
+            options: { ref: 'Customers' },
+          });
+        },
+      },
+    };
+
+    const customersModel = {
+      schema: {
+        paths: {
+          firstName: { instance: 'String' },
+        },
+      },
+      find: jest.fn(),
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') return ordersModel;
+        if (modelName === 'Customers') return customersModel;
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const customerId = '6a63b2aae93bdf502531c928';
+    const service = new FormQueryService(
+      registry as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          customer: {
+            operator: 'contains',
+            value: customerId,
+          },
+          discountCode: {
+            operator: 'contains',
+            value: '231',
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orders',
+      `{"customer":"${customerId}","discountCode":"231"}`,
+      undefined,
+    );
+
+    expect(customersModel.find).not.toHaveBeenCalled();
+    const findCalls = ordersModel.find.mock.calls as unknown[][];
+    const countCalls = ordersModel.countDocuments.mock.calls as unknown[][];
+    const findFilter = (findCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+    const countFilter = (countCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+
+    expect(findFilter.customer).toBeInstanceOf(Types.ObjectId);
+    expect(countFilter.customer).toBeInstanceOf(Types.ObjectId);
+    expect((findFilter.customer as Types.ObjectId).toHexString()).toBe(
+      customerId,
+    );
+    expect((countFilter.customer as Types.ObjectId).toHexString()).toBe(
+      customerId,
+    );
+    expect(findFilter.discountCode).toEqual({
+      $regex: '231',
+      $options: 'i',
+    });
+    expect(countFilter.discountCode).toEqual({
+      $regex: '231',
+      $options: 'i',
+    });
+  });
+
+  it('combines quick fields with OR and root fields with AND', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          customer: { instance: 'ObjectId' },
+          discountCode: { instance: 'String' },
+          status: { instance: 'ObjectId' },
+        },
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('customer', {
+            options: { ref: 'Customers' },
+          });
+        },
+      },
+    };
+
+    const customersModel = {
+      schema: {
+        paths: {
+          firstName: { instance: 'String' },
+        },
+      },
+      find: jest.fn(),
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') return ordersModel;
+        if (modelName === 'Customers') return customersModel;
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const statusId = '6a63cde5571a529c214a48b1';
+    const service = new FormQueryService(
+      registry as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          filters: {
+            status: {
+              operator: 'in',
+              value: [statusId],
+            },
+          },
+          quick: {
+            customer: {
+              operator: 'contains',
+              value: 'test',
+            },
+            discountCode: {
+              operator: 'contains',
+              value: 'test',
+            },
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orders',
+      `{"quick":{"customer":{"operator":"contains","value":"test"},"discountCode":{"operator":"contains","value":"test"}},"status":{"operator":"in","value":["${statusId}"]}}`,
+      undefined,
+    );
+
+    expect(customersModel.find).toHaveBeenCalled();
+
+    const findCalls = ordersModel.find.mock.calls as unknown[][];
+    const findFilter = (findCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+    const andFilter = findFilter.$and as unknown[];
+
+    expect(Array.isArray(andFilter)).toBe(true);
+    expect(andFilter).toHaveLength(2);
+
+    const quickGroup = andFilter[0] as { $or?: unknown[] };
+    const rootGroup = andFilter[1] as Record<string, unknown>;
+
+    expect(Array.isArray(quickGroup.$or)).toBe(true);
+    expect(quickGroup.$or).toEqual([
+      {
+        customer: {
+          $in: [],
+        },
+      },
+      {
+        discountCode: {
+          $regex: 'test',
+          $options: 'i',
+        },
+      },
+    ]);
+
+    const statusFilter = rootGroup.status as { $in?: unknown[] };
+    const inValues = Array.isArray(statusFilter.$in) ? statusFilter.$in : [];
+
+    expect(inValues.some((value) => value instanceof Types.ObjectId)).toBe(
+      true,
+    );
+    expect((inValues[0] as Types.ObjectId).toHexString()).toBe(statusId);
   });
 
   it('creates nested subforms from schema relation fields and saves parent with references', async () => {

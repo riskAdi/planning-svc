@@ -58,6 +58,48 @@ describe('FormController', () => {
       2,
       5,
       'nurse',
+      {
+        field: 'createdAt',
+        order: 'descend',
+      },
+    );
+  });
+
+  it('parses sorter and delegates list requests with sorter', async () => {
+    const expectedResponse = {
+      data: [{ id: '1', name: 'A' }],
+      meta: {
+        formName: 'products',
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+        include: [],
+      },
+    };
+    formQueryService.find.mockResolvedValue(expectedResponse);
+
+    await expect(
+      controller.getFormData(
+        'products',
+        '{"text":"test"}',
+        undefined,
+        '{"page":1}',
+        '{"field":"name","order":"ascend"}',
+      ),
+    ).resolves.toEqual(expectedResponse);
+
+    expect(formQueryService.find).toHaveBeenCalledWith(
+      'products',
+      '{"text":"test"}',
+      undefined,
+      1,
+      undefined,
+      'nurse',
+      {
+        field: 'name',
+        order: 'ascend',
+      },
     );
   });
 

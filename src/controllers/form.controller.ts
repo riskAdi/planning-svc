@@ -17,6 +17,18 @@ type PaginationQuery = {
   limit?: number;
 };
 
+type SortOrder = 'ascend' | 'descend';
+
+type SorterQuery = {
+  field: string;
+  order: SortOrder;
+};
+
+const DEFAULT_SORTER: SorterQuery = {
+  field: 'createdAt',
+  order: 'descend',
+};
+
 @Controller(['form', 'forms'])
 export class FormController {
   constructor(private readonly formQuery: FormQueryService) {}
@@ -27,10 +39,12 @@ export class FormController {
     @Query('search') search?: string,
     @Query('include') include?: string,
     @Query('pagination') pagination?: string,
+    @Query('sorter') sorter?: string,
     @Headers('x-user-role') userRole?: string,
     @Headers('x-role') fallbackRole?: string,
   ) {
     const parsedPagination = this.parsePagination(pagination);
+    const parsedSorter = this.parseSorter(sorter);
     const role = this.resolveRole(userRole, fallbackRole);
 
     return this.formQuery.find(
@@ -40,6 +54,7 @@ export class FormController {
       parsedPagination.page,
       parsedPagination.limit,
       role,
+      parsedSorter,
     );
   }
 
@@ -190,5 +205,42 @@ export class FormController {
     }
 
     return parsed;
+  }
+
+  private parseSorter(sorter: string | undefined): SorterQuery | undefined {
+    if (sorter === undefined) {
+      return DEFAULT_SORTER;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sorter) as unknown;
+    } catch {
+      throw new BadRequestException('sorter must be valid JSON');
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new BadRequestException('sorter must be a JSON object');
+    }
+
+    const value = parsed as Record<string, unknown>;
+    const field =
+      typeof value.field === 'string' ? value.field.trim() : undefined;
+    if (!field) {
+      throw new BadRequestException('sorter.field must be a non-empty string');
+    }
+
+    const order =
+      typeof value.order === 'string' ? value.order.trim().toLowerCase() : '';
+    if (order !== 'ascend' && order !== 'descend') {
+      throw new BadRequestException(
+        'sorter.order must be either "ascend" or "descend"',
+      );
+    }
+
+    return {
+      field,
+      order,
+    };
   }
 }
