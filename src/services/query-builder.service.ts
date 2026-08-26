@@ -29,7 +29,12 @@ export type SearchCondition = {
   value: unknown;
 };
 
-export type SearchQuery = Record<string, SearchCondition>;
+export type SearchConditionMap = Record<string, SearchCondition>;
+
+export type SearchQuery = {
+  filters: SearchConditionMap;
+  quick: SearchConditionMap;
+};
 
 const SUPPORTED_SEARCH_OPERATORS: SearchOperator[] = [
   'equals',
@@ -110,20 +115,25 @@ export class QueryBuilderService {
     const search = Array.isArray(rawSearch) ? rawSearch[0] : rawSearch;
 
     if (search && typeof search === 'string' && search.trim() !== '') {
-      Object.assign(filter, this.parseSearch(search));
+      const parsedSearch = this.parseSearch(search);
+      Object.assign(filter, parsedSearch.filters);
     }
 
     return filter;
   }
 
   parseSearch(search: unknown): SearchQuery {
-    if (search === undefined || search === null) return {};
+    if (search === undefined || search === null) {
+      return { filters: {}, quick: {} };
+    }
     if (typeof search !== 'string') {
       throw new BadRequestException('search must be a string');
     }
 
     const trimmed = search.trim();
-    if (trimmed === '') return {};
+    if (trimmed === '') {
+      return { filters: {}, quick: {} };
+    }
 
     if (!trimmed.startsWith('{')) {
       throw new BadRequestException(
@@ -142,17 +152,50 @@ export class QueryBuilderService {
       throw new BadRequestException('search JSON must be an object');
     }
 
-    const result: SearchQuery = {};
-    for (const [fieldName, rawCondition] of Object.entries(
-      parsed as Record<string, unknown>,
-    )) {
+    const parsedObject = parsed as Record<string, unknown>;
+    const quickRaw = parsedObject.quick;
+
+    if (
+      quickRaw !== undefined &&
+      (!quickRaw || typeof quickRaw !== 'object' || Array.isArray(quickRaw))
+    ) {
+      throw new BadRequestException('search.quick must be an object');
+    }
+
+    const result: SearchQuery = {
+      filters: this.parseConditionsMap(parsedObject, 'search', ['quick']),
+      quick:
+        quickRaw === undefined
+          ? {}
+          : this.parseConditionsMap(
+              quickRaw as Record<string, unknown>,
+              'search.quick',
+            ),
+    };
+
+    return result;
+  }
+
+  private parseConditionsMap(
+    source: Record<string, unknown>,
+    pathPrefix: string,
+    ignoredFields: string[] = [],
+  ): SearchConditionMap {
+    const ignoredFieldSet = new Set(ignoredFields);
+    const result: SearchConditionMap = {};
+
+    for (const [fieldName, rawCondition] of Object.entries(source)) {
+      if (ignoredFieldSet.has(fieldName)) {
+        continue;
+      }
+
       if (
         !rawCondition ||
         typeof rawCondition !== 'object' ||
         Array.isArray(rawCondition)
       ) {
         throw new BadRequestException(
-          `search.${fieldName} must be an object with operator and value`,
+          `${pathPrefix}.${fieldName} must be an object with operator and value`,
         );
       }
 
@@ -162,14 +205,14 @@ export class QueryBuilderService {
 
       if (typeof operatorRaw !== 'string' || operatorRaw.trim() === '') {
         throw new BadRequestException(
-          `search.${fieldName}.operator must be a non-empty string`,
+          `${pathPrefix}.${fieldName}.operator must be a non-empty string`,
         );
       }
 
       const operator = normalizeSearchOperator(operatorRaw);
       if (!operator) {
         throw new BadRequestException(
-          `search.${fieldName}.operator "${operatorRaw}" is not supported`,
+          `${pathPrefix}.${fieldName}.operator "${operatorRaw}" is not supported`,
         );
       }
 

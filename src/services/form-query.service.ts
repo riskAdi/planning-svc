@@ -13,6 +13,8 @@ import { excludeAuditFieldsFromResponse } from '../utils/response-sanitizer.util
 import { FormModelRegistryService } from './form-model-registry.service';
 import {
   QueryBuilderService,
+  type SearchCondition,
+  type SearchConditionMap,
   type SearchOperator,
   type SearchQuery,
 } from './query-builder.service';
@@ -819,16 +821,93 @@ export class FormQueryService {
     model: Model<any>,
     search: SearchQuery,
   ): Promise<Record<string, unknown>> {
-    const matchedSearch = toSchemaMatchedFilter(model, search) as SearchQuery;
+    const { rootConditions, quickConditions } =
+      this.normalizeSearchConditions(search);
+    const matchedSearch = toSchemaMatchedFilter(
+      model,
+      rootConditions,
+    ) as SearchConditionMap;
+    const matchedQuickSearch = toSchemaMatchedFilter(
+      model,
+      quickConditions,
+    ) as SearchConditionMap;
 
+    const rootFilter = await this.buildConditionsFilter(model, matchedSearch);
+
+    if (Object.keys(matchedQuickSearch).length === 0) {
+      return rootFilter;
+    }
+
+    const quickFilter = await this.buildConditionsFilter(
+      model,
+      matchedQuickSearch,
+    );
+    const quickOrClauses = Object.entries(quickFilter).map(
+      ([field, condition]) => ({
+        [field]: condition,
+      }),
+    );
+
+    if (quickOrClauses.length === 0) {
+      return rootFilter;
+    }
+
+    if (Object.keys(rootFilter).length === 0) {
+      return {
+        $or: quickOrClauses,
+      };
+    }
+
+    return {
+      $and: [{ $or: quickOrClauses }, rootFilter],
+    };
+  }
+
+  private normalizeSearchConditions(search: SearchQuery): {
+    rootConditions: SearchConditionMap;
+    quickConditions: SearchConditionMap;
+  } {
+    const searchRecord = search as Record<string, unknown>;
+    const hasNewShape =
+      isPlainObject(searchRecord.filters) || isPlainObject(searchRecord.quick);
+
+    if (hasNewShape) {
+      return {
+        rootConditions: isPlainObject(searchRecord.filters)
+          ? (searchRecord.filters as SearchConditionMap)
+          : {},
+        quickConditions: isPlainObject(searchRecord.quick)
+          ? (searchRecord.quick as SearchConditionMap)
+          : {},
+      };
+    }
+
+    return {
+      rootConditions: search as unknown as SearchConditionMap,
+      quickConditions: {},
+    };
+  }
+
+  private isSearchCondition(value: unknown): value is SearchCondition {
+    if (!isPlainObject(value)) {
+      return false;
+    }
+
+    return typeof value.operator === 'string' && 'value' in value;
+  }
+
+  private async buildConditionsFilter(
+    model: Model<any>,
+    conditions: SearchConditionMap,
+  ): Promise<Record<string, unknown>> {
     const nextFilter: Record<string, unknown> = {};
 
     const relationsByPath = new Map(
       getRelationInfo(model).map((relation) => [relation.path, relation]),
     );
 
-    for (const [fieldName, rawCondition] of Object.entries(matchedSearch)) {
-      if (!isPlainObject(rawCondition)) {
+    for (const [fieldName, rawCondition] of Object.entries(conditions)) {
+      if (!this.isSearchCondition(rawCondition)) {
         continue;
       }
 

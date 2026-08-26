@@ -1321,6 +1321,127 @@ describe('FormQueryService', () => {
     });
   });
 
+  it('combines quick fields with OR and root fields with AND', async () => {
+    const exec = jest.fn().mockResolvedValue([]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const ordersModel = {
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(0) }),
+      schema: {
+        paths: {
+          customer: { instance: 'ObjectId' },
+          discountCode: { instance: 'String' },
+          status: { instance: 'ObjectId' },
+        },
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('customer', {
+            options: { ref: 'Customers' },
+          });
+        },
+      },
+    };
+
+    const customersModel = {
+      schema: {
+        paths: {
+          firstName: { instance: 'String' },
+        },
+      },
+      find: jest.fn(),
+    };
+
+    const registry = {
+      resolveModel: jest.fn((modelName: string) => {
+        if (modelName === 'orders') return ordersModel;
+        if (modelName === 'Customers') return customersModel;
+        throw new Error(`Unexpected model lookup for ${modelName}`);
+      }),
+    };
+
+    const statusId = '6a63cde5571a529c214a48b1';
+    const service = new FormQueryService(
+      registry as never,
+      {
+        parseSearch: jest.fn().mockReturnValue({
+          filters: {
+            status: {
+              operator: 'in',
+              value: [statusId],
+            },
+          },
+          quick: {
+            customer: {
+              operator: 'contains',
+              value: 'test',
+            },
+            discountCode: {
+              operator: 'contains',
+              value: 'test',
+            },
+          },
+        }),
+      } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    await service.find(
+      'orders',
+      `{"quick":{"customer":{"operator":"contains","value":"test"},"discountCode":{"operator":"contains","value":"test"}},"status":{"operator":"in","value":["${statusId}"]}}`,
+      undefined,
+    );
+
+    expect(customersModel.find).toHaveBeenCalled();
+
+    const findCalls = ordersModel.find.mock.calls as unknown[][];
+    const findFilter = (findCalls[0]?.[0] ?? {}) as Record<string, unknown>;
+    const andFilter = findFilter.$and as unknown[];
+
+    expect(Array.isArray(andFilter)).toBe(true);
+    expect(andFilter).toHaveLength(2);
+
+    const quickGroup = andFilter[0] as { $or?: unknown[] };
+    const rootGroup = andFilter[1] as Record<string, unknown>;
+
+    expect(Array.isArray(quickGroup.$or)).toBe(true);
+    expect(quickGroup.$or).toEqual([
+      {
+        customer: {
+          $in: [],
+        },
+      },
+      {
+        discountCode: {
+          $regex: 'test',
+          $options: 'i',
+        },
+      },
+    ]);
+
+    const statusFilter = rootGroup.status as { $in?: unknown[] };
+    const inValues = Array.isArray(statusFilter.$in) ? statusFilter.$in : [];
+
+    expect(inValues.some((value) => value instanceof Types.ObjectId)).toBe(
+      true,
+    );
+    expect((inValues[0] as Types.ObjectId).toHexString()).toBe(statusId);
+  });
+
   it('creates nested subforms from schema relation fields and saves parent with references', async () => {
     const createPatient = jest.fn().mockResolvedValue({ _id: 'p1' });
     const createHospital = jest.fn().mockResolvedValue({ _id: 'h1' });
