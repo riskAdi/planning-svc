@@ -14,6 +14,35 @@ GET /form/{formName}?search={}&include={}
 Where:
 - `formName` is dynamic and can represent any entity (e.g., nurse, patients, products)
 - Each `formName` must have a corresponding MongoDB model schema defined in the system
+- `search` uses operator objects per field and supports a `quick` object for OR search
+
+### Search format
+
+Example:
+
+search={
+   "quick": {
+      "customer": {
+         "operator": "contains",
+         "value": "test"
+      },
+      "discountCode": {
+         "operator": "contains",
+         "value": "test"
+      }
+   },
+   "status": {
+      "operator": "in",
+      "value": [
+         "6a63cde5571a529c214a48b1"
+      ]
+   }
+}
+
+Semantics:
+- Fields inside `quick` are combined with OR.
+- Root-level fields are combined with AND.
+- Final logic is: (`quick.customer` OR `quick.discountCode`) AND `status`.
 
 ---
 
@@ -30,6 +59,7 @@ Where:
 3. Data fetching:
    - Base documents are fetched using the resolved model
    - `search` parameter is applied dynamically as filter conditions
+   - `quick` conditions are grouped with OR and ANDed with root filters
 
 4. Relation handling:
    - If the model schema defines relations (references to other collections):
@@ -61,6 +91,8 @@ Where:
 ### 3. Query Builder Service
 - Translates `search` query into MongoDB filters
 - Supports dynamic filtering across fields
+- Supports grouped quick-search (`search.quick`) using OR
+- Combines quick-search group with root filters using AND
 
 ---
 

@@ -80,6 +80,47 @@ $ pnpm run start:dev
 $ pnpm run start:prod
 ```
 
+## Dynamic form search format
+
+Endpoint pattern:
+
+```http
+GET /form/{formName}?search={...}&include={...}
+```
+
+`search` must be a JSON object string where:
+
+- Fields inside `quick` are combined with `OR`
+- Root-level fields are combined with `AND`
+- Final logic is: `(quick fields OR ...) AND (root fields AND ...)`
+
+Example:
+
+```json
+{
+  "search": {
+    "quick": {
+      "customer": {
+        "operator": "contains",
+        "value": "test"
+      },
+      "discountCode": {
+        "operator": "contains",
+        "value": "test"
+      }
+    },
+    "status": {
+      "operator": "in",
+      "value": ["6a63cde5571a529c214a48b1"]
+    }
+  }
+}
+```
+
+Equivalent filter logic:
+
+- `(customer contains "test" OR discountCode contains "test") AND status IN ["6a63cde5571a529c214a48b1"]`
+
 ## Run tests
 
 ```bash

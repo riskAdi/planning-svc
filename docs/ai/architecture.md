@@ -69,18 +69,56 @@ Transforms `search` query string into MongoDB filter objects.
 Example:
 
 Input:
-search=name:john,status:active
+search={
+   "quick": {
+      "customer": {
+         "operator": "contains",
+         "value": "test"
+      },
+      "discountCode": {
+         "operator": "contains",
+         "value": "test"
+      }
+   },
+   "status": {
+      "operator": "in",
+      "value": ["6a63cde5571a529c214a48b1"]
+   }
+}
 
 Output:
 {
-  name: "john",
-  status: "active"
+   "$and": [
+      {
+         "$or": [
+            {
+               "customer": {
+                  "$regex": "test",
+                  "$options": "i"
+               }
+            },
+            {
+               "discountCode": {
+                  "$regex": "test",
+                  "$options": "i"
+               }
+            }
+         ]
+      },
+      {
+         "status": {
+            "$in": ["6a63cde5571a529c214a48b1"]
+         }
+      }
+   ]
 }
 
 ### Responsibilities
 - Parse query parameters
 - Convert to MongoDB-compatible filters
 - Support dynamic fields
+- Apply OR between fields inside `search.quick`
+- Apply AND between the `quick` group and root-level `search` fields
 
 ---
 
@@ -118,18 +156,18 @@ include=customer,items
 ## Data Flow (Step-by-Step)
 
 1. Request received:
-   GET /form/orders?search=status:paid&include=customer
+   GET /form/orders?search={"quick":{"customer":{"operator":"contains","value":"test"},"discountCode":{"operator":"contains","value":"test"}},"status":{"operator":"in","value":["6a63cde5571a529c214a48b1"]}}&include=customer
 
 2. Controller extracts:
    - formName = orders
-   - search = status:paid
+   - search = JSON object with `quick` + root filters
    - include = customer
 
 3. ModelRegistry resolves:
    → orders model
 
 4. QueryBuilder builds Mongo filter:
-   → { status: "paid" }
+   → quick fields are grouped with OR, then ANDed with root fields
 
 5. MongoDB fetches base records
 
