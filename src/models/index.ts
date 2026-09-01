@@ -12,7 +12,6 @@ export * from './cpuSpeed.schema';
 export * from './customers.schema';
 export * from './discount.schema';
 export * from './discountBenefits.schema';
-export * from './discountRule.schema';
 export * from './doctors.schema';
 export * from './education.schema';
 export * from './fitType.schema';

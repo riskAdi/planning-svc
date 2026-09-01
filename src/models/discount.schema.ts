@@ -3,6 +3,8 @@ import { HydratedDocument } from 'mongoose';
 import mongoose from 'mongoose';
 
 import { DiscountBenefits } from './discountBenefits.schema';
+import type { FormPermissions } from './permissions.types';
+import { Products } from './products.schema';
 import { RuleLookup } from './ruleLookup.schema';
 
 export type DiscountDocument = HydratedDocument<Discount>;
@@ -29,6 +31,13 @@ export class Discount {
 
   @Prop({
     required: false,
+    type: [mongoose.Schema.Types.ObjectId],
+    ref: Products.name,
+  })
+  discountProducts: Array<mongoose.Types.ObjectId | Products>;
+
+  @Prop({
+    required: false,
     type: mongoose.Schema.Types.ObjectId,
     ref: DiscountBenefits.name,
   })
@@ -48,23 +57,6 @@ export class Discount {
   })
   scope: mongoose.Types.ObjectId;
 
-  // @Prop({
-  //   required: false,
-  //   type: [mongoose.Schema.Types.ObjectId],
-  //   ref: DiscountRule.name,
-  // })
-  // discount_rule: Array<mongoose.Types.ObjectId | DiscountRule>;
-
-  // @Prop({
-  //   required: false,
-  //   type: [mongoose.Schema.Types.ObjectId],
-  //   ref: Products.name,
-  // })
-  // product_list: Array<mongoose.Types.ObjectId | Products>;
-
-  // @Prop({ required: false, type: mongoose.Schema.Types.Mixed })
-  // productDiscount: any;
-
   @Prop({ required: false, type: [Date] })
   dateRange: Date[];
 
@@ -73,8 +65,6 @@ export class Discount {
 }
 
 export const DiscountSchema = SchemaFactory.createForClass(Discount);
-
-import type { FormPermissions } from './permissions.types';
 
 export const DiscountPermissions: FormPermissions = {
   form: {

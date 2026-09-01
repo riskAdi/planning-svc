@@ -19,6 +19,7 @@ import {
   type SearchQuery,
 } from './query-builder.service';
 import { RelationResolverService } from './relation-resolver.service';
+import { ResponseEnrichmentService } from './response-enrichment.service';
 
 type Payload = Record<string, unknown>;
 
@@ -753,6 +754,7 @@ export class FormQueryService {
     private readonly registry: FormModelRegistryService,
     private readonly queryBuilder: QueryBuilderService,
     private readonly relations: RelationResolverService,
+    private readonly responseEnrichment?: ResponseEnrichmentService,
   ) {}
 
   async find(
@@ -803,9 +805,15 @@ export class FormQueryService {
     const sanitizedData = excludeAuditFieldsFromResponse(
       filteredData,
     ) as unknown[];
+    const enrichedData = this.responseEnrichment
+      ? await this.responseEnrichment.enrichMany(sanitizedData, {
+          formName,
+          userRole: role,
+        })
+      : sanitizedData;
 
     return {
-      data: sanitizedData,
+      data: enrichedData,
       meta: {
         formName,
         page,
@@ -1242,7 +1250,15 @@ export class FormQueryService {
       role,
     );
 
-    return excludeAuditFieldsFromResponse(filteredData);
+    const sanitizedData = excludeAuditFieldsFromResponse(filteredData);
+    const enrichedData = this.responseEnrichment
+      ? await this.responseEnrichment.enrichOne(sanitizedData, {
+          formName,
+          userRole: role,
+        })
+      : sanitizedData;
+
+    return enrichedData;
   }
 
   async findAuditById(formName: string, id: string, userRole?: string) {

@@ -89,3 +89,10 @@ export const ProductsPermissions: FormPermissions = {
 (
   ProductsSchema as unknown as { formPermissions?: FormPermissions }
 ).formPermissions = ProductsPermissions;
+
+(
+  ProductsSchema as unknown as {
+    formPermissions?: FormPermissions;
+    excludeAttributes?: string[];
+  }
+).excludeAttributes = ['products_model']; // when fetched as subform

@@ -11,6 +11,7 @@ This folder contains **repo-specific guidance** for AI assistants (Claude/Cursor
 - `workflows.md`: How we expect changes to be implemented and verified.
 - `system-overview.md`: Runtime flow, query model, and current search semantics.
 - `architecture.md`: Component architecture and query orchestration details.
+- `response-enrichment.md`: Post-fetch enrichment architecture and how to add new form enrichers.
 
 ## Search format note
 
