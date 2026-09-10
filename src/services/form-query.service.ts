@@ -1530,6 +1530,8 @@ export class FormQueryService {
       'edit',
       role,
     );
+    const subformChangedFields =
+      await this.diffRelationSubformChangedFields(model, normalizedPayload);
     await this.resolveSubforms(model, normalizedPayload, true, role);
 
     const existing = (await model.findById(parentId).lean().exec()) as Record<
@@ -1546,7 +1548,10 @@ export class FormQueryService {
 
     const changedFields = enrichAuditChangesWithRelationName(
       model,
-      diffChangedFields(existing, normalizedPayload),
+      [
+        ...diffChangedFields(existing, normalizedPayload),
+        ...subformChangedFields,
+      ],
     );
     const hasAuditKey = Reflect.has(existing, 'audit');
 
@@ -1765,6 +1770,66 @@ export class FormQueryService {
 
       payload[relation.path] = relationValue;
     }
+  }
+
+  private async diffRelationSubformChangedFields(
+    model: Model<any>,
+    payload: Payload,
+  ): Promise<AuditChange[]> {
+    const relations = getRelationInfo(model);
+    const changes: AuditChange[] = [];
+
+    for (const relation of relations) {
+      let value = payload[relation.path];
+
+      if (typeof value === 'string') {
+        try {
+          value = JSON.parse(value);
+        } catch {
+          continue;
+        }
+      }
+
+      if (!isPlainObject(value) && !isObjectArray(value)) {
+        continue;
+      }
+
+      const relationModel = this.registry.resolveModel(relation.refModelName);
+      if (typeof relationModel.findById !== 'function') {
+        continue;
+      }
+      const sourceItems = Array.isArray(value) ? value : [value];
+
+      for (const [index, item] of sourceItems.entries()) {
+        if (!isPlainObject(item)) {
+          continue;
+        }
+
+        const relationId = getEntityId(item);
+        if (!relationId) {
+          continue;
+        }
+
+        const previousRelation = (await relationModel.findById(relationId)
+          .lean()
+          .exec()) as Record<string, unknown> | null;
+
+        if (!previousRelation) {
+          continue;
+        }
+
+        const relationPayload = toCreatePayload(item);
+        const basePath = Array.isArray(value)
+          ? `${relation.path}[${index}]`
+          : relation.path;
+
+        changes.push(
+          ...diffChangedFields(previousRelation, relationPayload, basePath),
+        );
+      }
+    }
+
+    return changes;
   }
 
   private mergeArrayRelationsWithExisting(

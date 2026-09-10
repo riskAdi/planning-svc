@@ -1864,6 +1864,119 @@ describe('FormQueryService', () => {
     );
   });
 
+  it('captures nested subform field updates in audit changedFields', async () => {
+    const discountBenefitsId = new Types.ObjectId('66b0f0ef94e0e78f5f6b1201');
+
+    const discountModel = {
+      schema: {
+        eachPath: (
+          callback: (pathName: string, schemaType: unknown) => void,
+        ) => {
+          callback('discountBenefits', {
+            options: { ref: 'DiscountBenefits' },
+          });
+        },
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'd1',
+            title: 'Discount on cart',
+            discountBenefits: discountBenefitsId,
+          }),
+        }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: 'd1',
+            title: 'Discount on cart',
+            discountBenefits: discountBenefitsId,
+          }),
+        }),
+      }),
+    };
+
+    const discountBenefitsModel = {
+      schema: {
+        eachPath: jest.fn(),
+      },
+      findById: jest.fn().mockReturnValue({
+        lean: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue({
+            _id: discountBenefitsId,
+            amount: 5,
+            toggleAmount: ['1'],
+            gifts: ['1'],
+          }),
+        }),
+      }),
+      findByIdAndUpdate: jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({
+          _id: discountBenefitsId,
+          amount: 7,
+          toggleAmount: ['1'],
+          gifts: ['1'],
+        }),
+      }),
+      create: jest.fn(),
+    };
+
+    const service = new FormQueryService(
+      {
+        resolveModel: jest.fn((formName: string) => {
+          if (formName === 'discount') {
+            return discountModel;
+          }
+
+          if (formName === 'DiscountBenefits') {
+            return discountBenefitsModel;
+          }
+
+          throw new Error(`Unexpected model lookup for ${formName}`);
+        }),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.update('discount', {
+      id: 'd1',
+      title: 'Discount on cart',
+      discountBenefits: {
+        id: discountBenefitsId.toHexString(),
+        amount: 7,
+        toggleAmount: ['1'],
+        gifts: ['1'],
+      },
+    });
+
+    const updateCallArgs = discountModel.findByIdAndUpdate.mock.calls[0] as [
+      string,
+      Record<string, unknown>,
+      Record<string, unknown>,
+    ];
+    const updatePayload = updateCallArgs[1];
+    const pushPayload = updatePayload.$push as
+      | {
+          audit?: {
+            changedFields?: unknown[];
+          };
+        }
+      | undefined;
+    const changedFields = pushPayload?.audit?.changedFields;
+
+    expect(changedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'discountBenefits.amount',
+          from: 5,
+          to: 7,
+        }),
+      ]),
+    );
+  });
+
   it('creates subform record with parent_id when payload contains subform key', async () => {
     const createEducation = jest.fn().mockResolvedValue({
       toObject: () => ({ _id: 'e1', title: 'Matric', parent_id: 'c1' }),
