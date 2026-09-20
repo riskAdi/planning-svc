@@ -1138,7 +1138,7 @@ export const subCategoryData = [
     slug: 'smartphones',
     category: 'electronics',
     description: 'Mobile phones and accessories',
-     fields: {
+    fields: {
       id: 1,
       fields: {
         battery_life: {
@@ -1517,6 +1517,22 @@ export const ruleLookupData = [
   {
     name: 'MIN_CART_TOTAL_AMOUNT',
     slug: 'min_cart_total',
+  },
+];
+
+// Buy X Get X Free lookup dataset
+export const buyXGetXFreeData = [
+  {
+    name: 'Buy 1 Get 1 Free',
+    slug: 'buy_1_get_1_free',
+  },
+  {
+    name: 'Buy 1 Get 2 Free',
+    slug: 'buy_1_get_2_free',
+  },
+  {
+    name: 'Buy 1 Get 3 Free',
+    slug: 'buy_1_get_3_free',
   },
 ];
 

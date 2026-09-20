@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import mongoose from 'mongoose';
+import { BuyXGetXFree } from './buyXGetXFree.schema';
 
 export type DiscountBenefitsDocument = HydratedDocument<DiscountBenefits>;
 
@@ -9,14 +10,24 @@ export class DiscountBenefits {
   @Prop({ required: false })
   amount: number;
 
+  @Prop({ required: false })
+  discountAmountType: string;
+
   @Prop({ required: false, type: [mongoose.Schema.Types.Mixed] })
-  toggleAmount: any[];
+  discountType: any[];
 
   @Prop({ required: false, type: [mongoose.Schema.Types.Mixed] })
   freeShipping: any[];
 
   @Prop({ required: false, type: [mongoose.Schema.Types.Mixed] })
   gifts: any[];
+
+  @Prop({
+    required: false,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: BuyXGetXFree.name,
+  })
+  buyXGetXFree: mongoose.Types.ObjectId | BuyXGetXFree;
 }
 
 export const DiscountBenefitsSchema =
@@ -33,6 +44,11 @@ export const DiscountBenefitsPermissions: FormPermissions = {
   },
   fields: {
     amount: ['nurse', 'patient'],
+    discountAmountType: ['nurse', 'patient'],
+    discountType: ['nurse', 'patient'],
+    freeShipping: ['nurse', 'patient'],
+    gifts: ['nurse', 'patient'],
+    buyXGetXFree: ['nurse', 'patient'],
   },
 };
 

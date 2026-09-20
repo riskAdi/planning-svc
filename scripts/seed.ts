@@ -21,6 +21,8 @@ import { ColorsClassSchema } from '../src/models/colorsClass.schema';
 import { OrderStatusSchema } from '../src/models/orderStatus.schema';
 import { ScopeLookupSchema } from '../src/models/ScopeLookup.schema';
 import { RuleLookupSchema } from '../src/models/ruleLookup.schema';
+import { BuyXGetXFreeSchema } from '../src/models/buyXGetXFree.schema';
+import { isMongooseStrictModeEnabled } from '../src/utils/mongoose-strict-mode.util';
 import {
   ageRangeData,
   cameraFrontData,
@@ -44,11 +46,13 @@ import {
   orderStatusData,
   scopeLookupData,
   ruleLookupData,
+  buyXGetXFreeData,
 } from './seed-data';
 
 const MONGODB_URI =
   process.env.MONGODB_URI ||
   'mongodb://planning_admin:planning_password@localhost:27017/planning?authSource=admin';
+const mongooseStrictModeEnabled = isMongooseStrictModeEnabled();
 
 function toSlug(value: string): string {
   return value
@@ -62,6 +66,39 @@ async function seedDatabase() {
   try {
     await mongoose.connect(MONGODB_URI);
     console.log('Connected to MongoDB');
+    console.log(
+      `Mongoose strict mode: ${mongooseStrictModeEnabled ? 'enabled' : 'disabled'}`,
+    );
+
+    const schemas: mongoose.Schema[] = [
+      AgeRangeSchema as mongoose.Schema,
+      CameraFrontSchema as mongoose.Schema,
+      BatteryLifeSchema as mongoose.Schema,
+      ClothingMaterialSchema as mongoose.Schema,
+      ClothingStyleSchema as mongoose.Schema,
+      ApparelSchema as mongoose.Schema,
+      LaptopConditionSchema as mongoose.Schema,
+      CpuManufacturerSchema as mongoose.Schema,
+      CpuSpeedSchema as mongoose.Schema,
+      ModelSizeSchema as mongoose.Schema,
+      FitTypeSchema as mongoose.Schema,
+      MensTrendSchema as mongoose.Schema,
+      ProcessorTypeSchema as mongoose.Schema,
+      SeasonSchema as mongoose.Schema,
+      SystemMemorySchema as mongoose.Schema,
+      WirelessConnectivitySchema as mongoose.Schema,
+      CategorySchema as mongoose.Schema,
+      SubCategorySchema as mongoose.Schema,
+      ColorsClassSchema as mongoose.Schema,
+      OrderStatusSchema as mongoose.Schema,
+      ScopeLookupSchema as mongoose.Schema,
+      RuleLookupSchema as mongoose.Schema,
+      BuyXGetXFreeSchema as mongoose.Schema,
+    ];
+
+    schemas.forEach((schema) =>
+      schema.set('strict', mongooseStrictModeEnabled),
+    );
 
     const AgeRangeModel = mongoose.model('AgeRange', AgeRangeSchema);
     const CameraFrontModel = mongoose.model('CameraFront', CameraFrontSchema);
@@ -111,6 +148,10 @@ async function seedDatabase() {
     const RuleLookupModel = mongoose.model(
       'RuleLookup',
       RuleLookupSchema as mongoose.Schema,
+    );
+    const BuyXGetXFreeModel = mongoose.model(
+      'BuyXGetXFree',
+      BuyXGetXFreeSchema as mongoose.Schema,
     );
 
     console.log('🌱 Seeding AgeRange...');
@@ -388,6 +429,19 @@ async function seedDatabase() {
       ),
     );
     console.log(`✓ RuleLookup seeded (${ruleLookupResults.length} records)`);
+
+    console.log('🌱 Seeding BuyXGetXFree...');
+    const buyXGetXFreeResults = await Promise.all(
+      buyXGetXFreeData.map((data) =>
+        BuyXGetXFreeModel.findOneAndUpdate({ slug: data.slug }, data, {
+          upsert: true,
+          returnDocument: 'after',
+        }),
+      ),
+    );
+    console.log(
+      `✓ BuyXGetXFree seeded (${buyXGetXFreeResults.length} records)`,
+    );
 
     console.log('\n✅ All data seeded successfully!');
     process.exit(0);

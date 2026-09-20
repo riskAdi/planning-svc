@@ -46,7 +46,15 @@ This service reads `MONGODB_URI` from `.env`. Default in `.env.example` is:
 MONGO_ROOT_USERNAME=planning_admin
 MONGO_ROOT_PASSWORD=planning_password
 MONGODB_URI=mongodb://planning_admin:planning_password@localhost:27017/planning?authSource=admin
+MONGOOSE_STRICT_MODE=true
 ```
+
+`MONGOOSE_STRICT_MODE` controls schema strictness for all models:
+
+- `true` (default): only schema-defined fields are persisted
+- `false`: extra/unmapped fields are allowed and persisted
+
+Accepted false-like values: `false`, `0`, `off`, `no`.
 
 If you already started MongoDB before enabling auth, run this once to recreate the volume with credentials:
 

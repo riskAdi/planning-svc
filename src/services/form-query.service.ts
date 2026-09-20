@@ -1530,8 +1530,10 @@ export class FormQueryService {
       'edit',
       role,
     );
-    const subformChangedFields =
-      await this.diffRelationSubformChangedFields(model, normalizedPayload);
+    const subformChangedFields = await this.diffRelationSubformChangedFields(
+      model,
+      normalizedPayload,
+    );
     await this.resolveSubforms(model, normalizedPayload, true, role);
 
     const existing = (await model.findById(parentId).lean().exec()) as Record<
@@ -1546,13 +1548,10 @@ export class FormQueryService {
 
     this.mergeArrayRelationsWithExisting(model, existing, normalizedPayload);
 
-    const changedFields = enrichAuditChangesWithRelationName(
-      model,
-      [
-        ...diffChangedFields(existing, normalizedPayload),
-        ...subformChangedFields,
-      ],
-    );
+    const changedFields = enrichAuditChangesWithRelationName(model, [
+      ...diffChangedFields(existing, normalizedPayload),
+      ...subformChangedFields,
+    ]);
     const hasAuditKey = Reflect.has(existing, 'audit');
 
     const setPayload: Record<string, unknown> = {
@@ -1810,7 +1809,8 @@ export class FormQueryService {
           continue;
         }
 
-        const previousRelation = (await relationModel.findById(relationId)
+        const previousRelation = (await relationModel
+          .findById(relationId)
           .lean()
           .exec()) as Record<string, unknown> | null;
 

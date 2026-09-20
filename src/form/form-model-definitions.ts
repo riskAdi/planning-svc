@@ -2,6 +2,9 @@ import { ModelDefinition } from '@nestjs/mongoose';
 import { Schema } from 'mongoose';
 
 import * as Models from '../models';
+import { isMongooseStrictModeEnabled } from '../utils/mongoose-strict-mode.util';
+
+const mongooseStrictModeEnabled = isMongooseStrictModeEnabled();
 
 const auditChangeSchema = new Schema(
   {
@@ -48,6 +51,7 @@ export const FORM_MODEL_DEFINITIONS: ModelDefinition[] = Object.entries(Models)
       exportName.endsWith('Schema') && value instanceof Schema,
   )
   .map(([schemaExportName, schema]) => {
+    (schema as Schema).set('strict', mongooseStrictModeEnabled);
     ensureAuditField(schema as Schema);
 
     const classExportName = schemaExportName.replace(/Schema$/, '');

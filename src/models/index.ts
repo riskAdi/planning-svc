@@ -2,6 +2,7 @@ export * from './address.schema';
 export * from './ageRange.schema';
 export * from './apparel.schema';
 export * from './batteryLife.schema';
+export * from './buyXGetXFree.schema';
 export * from './cameraFront.schema';
 export * from './category.schema';
 export * from './clothingMaterial.schema';
