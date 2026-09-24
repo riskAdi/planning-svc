@@ -7,6 +7,10 @@ import {
 import { isDeepStrictEqual } from 'node:util';
 import { Types, type Model, type Schema, type SchemaType } from 'mongoose';
 
+import {
+  getHierarchicalFormConfigByModelName,
+  type HierarchicalFormConfig,
+} from '../constants/hierarchical-forms.constants';
 import type { FormModelDefinition } from '../form-model.registry';
 import { excludeAuditFieldsFromResponse } from '../utils/response-sanitizer.util';
 
@@ -172,6 +176,93 @@ function isObjectArray(value: unknown): value is Record<string, unknown>[] {
     value.length > 0 &&
     value.every((item) => isPlainObject(item))
   );
+}
+
+function toStringId(value: unknown): string | null {
+  if (value instanceof Types.ObjectId) {
+    return value.toHexString();
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return null;
+}
+
+function isObjectLikeRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function toShallowRecord(value: unknown): Record<string, unknown> {
+  return Object.assign({}, value as object) as Record<string, unknown>;
+}
+
+function resolveParentId(value: unknown): string | null {
+  const directParentId = toStringId(value);
+  if (directParentId) {
+    return directParentId;
+  }
+
+  if (!isObjectLikeRecord(value)) {
+    return null;
+  }
+
+  const nestedId =
+    (Reflect.get(value, 'id') as unknown) ??
+    (Reflect.get(value, '_id') as unknown);
+  return toStringId(nestedId);
+}
+
+function toHierarchicalTree(
+  source: unknown[],
+  config: HierarchicalFormConfig,
+): unknown[] {
+  const records = source.filter((item) => isObjectLikeRecord(item));
+  if (records.length === 0) {
+    return source;
+  }
+
+  const nodesById = new Map<string, Record<string, unknown>>();
+  const orderedNodes: Record<string, unknown>[] = records.map((record) => {
+    const cloned: Record<string, unknown> = {
+      ...toShallowRecord(record),
+      [config.childrenField]: [],
+    };
+
+    const id = toStringId(cloned[config.idField]);
+    if (id) {
+      nodesById.set(id, cloned);
+    }
+
+    return cloned;
+  });
+
+  const roots: Record<string, unknown>[] = [];
+
+  for (const node of orderedNodes) {
+    const nodeId = toStringId(node[config.idField]);
+    const parentId = resolveParentId(node[config.parentField]);
+
+    if (
+      parentId &&
+      parentId !== nodeId &&
+      nodesById.has(parentId)
+    ) {
+      const parent = nodesById.get(parentId) as Record<string, unknown>;
+      const parentChildren = parent[config.childrenField] as unknown[];
+      parentChildren.push(node);
+      continue;
+    }
+
+    roots.push(node);
+  }
+
+  return roots;
 }
 
 function toCreatePayload(
@@ -767,6 +858,9 @@ export class FormQueryService {
     sorter?: SorterQuery,
   ): Promise<PaginatedResult> {
     const model = this.registry.resolveModel(formName);
+    const hierarchyConfig = getHierarchicalFormConfigByModelName(
+      model.modelName,
+    );
     const role = normalizeRole(userRole);
     const permissions = getModelPermissions(model);
     this.assertFormPermission(formName, permissions, 'read', role);
@@ -791,12 +885,14 @@ export class FormQueryService {
       query.sort({ [sortField]: toMongoSortOrder(sorter.order) });
     }
 
-    query.skip(skip).limit(limit);
+    if (!hierarchyConfig) {
+      query.skip(skip).limit(limit);
+    }
 
-    const [data, total] = await Promise.all([
-      query.lean().exec(),
-      model.countDocuments(filter).exec(),
-    ]);
+    const data = await query.lean().exec();
+    const total = hierarchyConfig
+      ? data.length
+      : await model.countDocuments(filter).exec();
 
     const transformedData = transformIds(data) as unknown[];
     const filteredData = transformedData.map((item) =>
@@ -812,14 +908,28 @@ export class FormQueryService {
         })
       : sanitizedData;
 
+    const responseData = hierarchyConfig
+      ? toHierarchicalTree(enrichedData, hierarchyConfig)
+      : enrichedData;
+
+    const responsePage = hierarchyConfig ? 1 : page;
+    const responseLimit = hierarchyConfig ? total : limit;
+    const responseTotalPages = hierarchyConfig
+      ? total === 0
+        ? 0
+        : 1
+      : total === 0
+        ? 0
+        : Math.ceil(total / limit);
+
     return {
-      data: enrichedData,
+      data: responseData,
       meta: {
         formName,
-        page,
-        limit,
+        page: responsePage,
+        limit: responseLimit,
         total,
-        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+        totalPages: responseTotalPages,
         include: includes,
       },
     };

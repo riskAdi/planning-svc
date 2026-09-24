@@ -131,6 +131,173 @@ describe('FormQueryService', () => {
     });
   });
 
+  it('automatically returns full hierarchical tree and ignores pagination for configured parent-child models', async () => {
+    const exec = jest.fn().mockResolvedValue([
+      { _id: 'root-1', name: 'Root 1', parentId: null },
+      { _id: 'child-1', name: 'Child 1', parentId: 'root-1' },
+      { _id: 'root-2', name: 'Root 2', parentId: null },
+      { _id: 'child-2', name: 'Child 2', parentId: 'root-1' },
+    ]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const limit = jest.fn().mockReturnValue({ lean });
+    const skip = jest.fn().mockReturnValue({ limit });
+    const query = {
+      skip,
+      limit,
+      lean,
+      populate: jest.fn(),
+    };
+
+    const countExec = jest.fn().mockResolvedValue(4);
+    const categoryModel = {
+      modelName: 'Category',
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest.fn().mockReturnValue({ exec: countExec }),
+      schema: { eachPath: jest.fn() },
+    };
+
+    const service = new FormQueryService(
+      {
+        resolveModel: jest.fn().mockReturnValue(categoryModel),
+      } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue([]),
+        applyPopulate: jest.fn(),
+      } as never,
+    );
+
+    const result = await service.find('category', undefined, undefined, 2, 1);
+
+    expect(result.data).toEqual([
+      {
+        id: 'root-1',
+        name: 'Root 1',
+        parentId: null,
+        children: [
+          {
+            id: 'child-1',
+            name: 'Child 1',
+            parentId: 'root-1',
+            children: [],
+          },
+          {
+            id: 'child-2',
+            name: 'Child 2',
+            parentId: 'root-1',
+            children: [],
+          },
+        ],
+      },
+      {
+        id: 'root-2',
+        name: 'Root 2',
+        parentId: null,
+        children: [],
+      },
+    ]);
+    expect(skip).not.toHaveBeenCalled();
+    expect(limit).not.toHaveBeenCalled();
+    expect(categoryModel.countDocuments).not.toHaveBeenCalled();
+    expect(result.meta.page).toBe(1);
+    expect(result.meta.limit).toBe(4);
+    expect(result.meta.total).toBe(4);
+    expect(result.meta.totalPages).toBe(1);
+  });
+
+  it('nests children under parent when records are enriched class instances with populated parent objects', async () => {
+    class EnrichedRecord {
+      constructor(data: Record<string, unknown>) {
+        Object.assign(this, data);
+      }
+    }
+
+    const exec = jest.fn().mockResolvedValue([
+      { _id: 'fashion-2', name: 'Fashion-2', parentId: 'fashion-1' },
+      { _id: 'fashion-1', name: 'Fashion-1', parentId: 'fashion' },
+      { _id: 'fashion', name: 'Fashion', parentId: null },
+    ]);
+    const lean = jest.fn().mockReturnValue({ exec });
+    const query = {
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnValue({ lean }),
+      lean,
+      populate: jest.fn(),
+    };
+
+    const categoryModel = {
+      modelName: 'Category',
+      find: jest.fn().mockReturnValue(query),
+      countDocuments: jest
+        .fn()
+        .mockReturnValue({ exec: jest.fn().mockResolvedValue(3) }),
+      schema: { eachPath: jest.fn() },
+    };
+
+    const responseEnrichment = {
+      enrichMany: jest.fn().mockResolvedValue([
+        new EnrichedRecord({
+          id: 'fashion-2',
+          name: 'Fashion-2',
+          parentId: new EnrichedRecord({
+            id: 'fashion-1',
+            name: 'Fashion-1',
+            parentId: new EnrichedRecord({ id: 'fashion', name: 'Fashion' }),
+          }),
+        }),
+        new EnrichedRecord({
+          id: 'fashion-1',
+          name: 'Fashion-1',
+          parentId: new EnrichedRecord({ id: 'fashion', name: 'Fashion' }),
+        }),
+        new EnrichedRecord({
+          id: 'fashion',
+          name: 'Fashion',
+          parentId: null,
+        }),
+      ]),
+    };
+
+    const service = new FormQueryService(
+      { resolveModel: jest.fn().mockReturnValue(categoryModel) } as never,
+      { parseSearch: jest.fn().mockReturnValue({}) } as never,
+      {
+        resolveIncludePaths: jest.fn().mockReturnValue(['parentId']),
+        applyPopulate: jest.fn(),
+      } as never,
+      responseEnrichment as never,
+    );
+
+    const result = await service.find('category', undefined, 'parentId');
+
+    expect(result.data).toEqual([
+      {
+        id: 'fashion',
+        name: 'Fashion',
+        parentId: null,
+        children: [
+          {
+            id: 'fashion-1',
+            name: 'Fashion-1',
+            parentId: { id: 'fashion', name: 'Fashion' },
+            children: [
+              {
+                id: 'fashion-2',
+                name: 'Fashion-2',
+                parentId: {
+                  id: 'fashion-1',
+                  name: 'Fashion-1',
+                  parentId: { id: 'fashion', name: 'Fashion' },
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
   it('applies sorter when field is valid and role can read it', async () => {
     const exec = jest.fn().mockResolvedValue([{ _id: 'p1', name: 'Alpha' }]);
     const lean = jest.fn().mockReturnValue({ exec });
