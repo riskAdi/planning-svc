@@ -1,6 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { HydratedDocument } from 'mongoose';
 
+import { applyAutoSlugPolicy } from '../utils/slug-policy.util';
+
 export type CategoryDocument = HydratedDocument<Category>;
 
 @Schema({ timestamps: true })
@@ -33,3 +35,5 @@ export class Category {
 }
 
 export const CategorySchema = SchemaFactory.createForClass(Category);
+
+applyAutoSlugPolicy(CategorySchema);

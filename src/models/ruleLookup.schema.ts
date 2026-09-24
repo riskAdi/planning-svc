@@ -1,6 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
+import { applyAutoSlugPolicy } from '../utils/slug-policy.util';
+
 export type RuleLookupDocument = HydratedDocument<RuleLookup>;
 
 @Schema({ timestamps: true })
@@ -13,3 +15,5 @@ export class RuleLookup {
 }
 
 export const RuleLookupSchema = SchemaFactory.createForClass(RuleLookup);
+
+applyAutoSlugPolicy(RuleLookupSchema);

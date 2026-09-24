@@ -2,6 +2,8 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 import mongoose from 'mongoose';
 
+import { applyAutoSlugPolicy } from '../utils/slug-policy.util';
+
 export type OrderStatusDocument = HydratedDocument<OrderStatus>;
 
 @Schema({ timestamps: true })
@@ -17,6 +19,8 @@ export class OrderStatus {
 }
 
 export const OrderStatusSchema = SchemaFactory.createForClass(OrderStatus);
+
+applyAutoSlugPolicy(OrderStatusSchema);
 
 import type { FormPermissions } from './permissions.types';
 

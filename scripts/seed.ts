@@ -54,14 +54,6 @@ const MONGODB_URI =
   'mongodb://planning_admin:planning_password@localhost:27017/planning?authSource=admin';
 const mongooseStrictModeEnabled = isMongooseStrictModeEnabled();
 
-function toSlug(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
-
 async function seedDatabase() {
   try {
     await mongoose.connect(MONGODB_URI);
@@ -346,8 +338,8 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding Categories...');
     const categoryResults = await Promise.all(
-      categoryData.map((data) =>
-        CategoryModel.findOneAndUpdate({ slug: data.slug }, data, {
+      categoryData.map(({ slug: _slug, ...data }) =>
+        CategoryModel.findOneAndUpdate({ name: data.name }, data, {
           upsert: true,
           returnDocument: 'after',
         }),
@@ -357,7 +349,7 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding SubCategories...');
     const subCategoryResults = await Promise.all(
-      subCategoryData.map(async (data) => {
+      subCategoryData.map(async ({ slug: _slug, ...data }) => {
         const category = await CategoryModel.findOne({ slug: data.category });
         if (!category) {
           console.warn(`⚠️  Category not found: ${data.category}`);
@@ -365,7 +357,7 @@ async function seedDatabase() {
         }
 
         return SubCategoryModel.findOneAndUpdate(
-          { slug: data.slug },
+          { name: data.name },
           { ...data, category: category._id },
           { upsert: true, returnDocument: 'after' },
         );
@@ -391,14 +383,10 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding OrderStatus...');
     const orderStatusResults = await Promise.all(
-      orderStatusData.map((data) => {
-        const slug = data.slug ?? toSlug(data.name);
-
+      orderStatusData.map(({ slug: _slug, ...data }) => {
         return OrderStatusModel.findOneAndUpdate(
-          {
-            $or: [{ slug }, { name: data.name }],
-          },
-          { ...data, slug },
+          { name: data.name },
+          data,
           {
             upsert: true,
             returnDocument: 'after',
@@ -410,8 +398,8 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding ScopeLookup...');
     const scopeLookupResults = await Promise.all(
-      scopeLookupData.map((data) =>
-        ScopeLookupModel.findOneAndUpdate({ slug: data.slug }, data, {
+      scopeLookupData.map(({ slug: _slug, ...data }) =>
+        ScopeLookupModel.findOneAndUpdate({ name: data.name }, data, {
           upsert: true,
           returnDocument: 'after',
         }),
@@ -421,8 +409,8 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding RuleLookup...');
     const ruleLookupResults = await Promise.all(
-      ruleLookupData.map((data) =>
-        RuleLookupModel.findOneAndUpdate({ slug: data.slug }, data, {
+      ruleLookupData.map(({ slug: _slug, ...data }) =>
+        RuleLookupModel.findOneAndUpdate({ name: data.name }, data, {
           upsert: true,
           returnDocument: 'after',
         }),
@@ -432,8 +420,8 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding BuyXGetXFree...');
     const buyXGetXFreeResults = await Promise.all(
-      buyXGetXFreeData.map((data) =>
-        BuyXGetXFreeModel.findOneAndUpdate({ slug: data.slug }, data, {
+      buyXGetXFreeData.map(({ slug: _slug, ...data }) =>
+        BuyXGetXFreeModel.findOneAndUpdate({ name: data.name }, data, {
           upsert: true,
           returnDocument: 'after',
         }),

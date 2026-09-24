@@ -1,6 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { HydratedDocument } from 'mongoose';
 
+import { applyAutoSlugPolicy } from '../utils/slug-policy.util';
+
 import { Category } from './category.schema';
 
 export type CategoryAttributesDocument = HydratedDocument<CategoryAttributes>;
@@ -35,6 +37,8 @@ export class CategoryAttributes {
 
 export const CategoryAttributesSchema =
   SchemaFactory.createForClass(CategoryAttributes);
+
+applyAutoSlugPolicy(CategoryAttributesSchema);
 
 export { CategoryAttributes as SubCategory };
 export type SubCategoryDocument = CategoryAttributesDocument;
