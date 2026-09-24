@@ -3,10 +3,10 @@ import mongoose, { HydratedDocument } from 'mongoose';
 
 import { Category } from './category.schema';
 
-export type SubCategoryDocument = HydratedDocument<SubCategory>;
+export type CategoryAttributesDocument = HydratedDocument<CategoryAttributes>;
 
-@Schema({ timestamps: true })
-export class SubCategory {
+@Schema({ timestamps: true, collection: 'subcategories' })
+export class CategoryAttributes {
   @Prop({ required: true, trim: true })
   name: string;
 
@@ -33,4 +33,9 @@ export class SubCategory {
   sortOrder: number;
 }
 
-export const SubCategorySchema = SchemaFactory.createForClass(SubCategory);
+export const CategoryAttributesSchema =
+  SchemaFactory.createForClass(CategoryAttributes);
+
+export { CategoryAttributes as SubCategory };
+export type SubCategoryDocument = CategoryAttributesDocument;
+export const SubCategorySchema = CategoryAttributesSchema;

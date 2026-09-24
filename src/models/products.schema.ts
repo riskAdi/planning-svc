@@ -38,7 +38,7 @@ export class Products {
   @Prop({
     required: false,
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'SubCategory',
+    ref: 'CategoryAttributes',
   })
   category: mongoose.Types.ObjectId;
 
